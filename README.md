@@ -4,17 +4,19 @@ Playwright HUD plugin — renders a visible **mouse cursor**, **keystroke displa
 
 ## Demos
 
+> Click a thumbnail to watch the full video
+
 ### Dashboard — nav clicks, Ctrl+K search, modal form typing
 
-<video src="https://raw.githubusercontent.com/snomiao/qa-hud/main/docs/assets/01-dashboard.webm" controls muted width="100%"></video>
+[![Dashboard demo](docs/assets/01-dashboard.png)](https://github.com/snomiao/qa-hud/raw/main/docs/assets/01-dashboard.mp4)
 
 ### Code Editor — typing code, Ctrl+S/Z/A, Shift+Arrow selection, tab switching
 
-<video src="https://raw.githubusercontent.com/snomiao/qa-hud/main/docs/assets/02-code-editor.webm" controls muted width="100%"></video>
+[![Code editor demo](docs/assets/02-code-editor.png)](https://github.com/snomiao/qa-hud/raw/main/docs/assets/02-code-editor.mp4)
 
 ### E-commerce Checkout — browse products, add to cart, fill payment form, pay
 
-<video src="https://raw.githubusercontent.com/snomiao/qa-hud/main/docs/assets/03-checkout.webm" controls muted width="100%"></video>
+[![Checkout demo](docs/assets/03-checkout.png)](https://github.com/snomiao/qa-hud/raw/main/docs/assets/03-checkout.mp4)
 
 ## Problem
 
