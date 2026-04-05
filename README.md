@@ -2,6 +2,20 @@
 
 Playwright HUD plugin — renders a visible **mouse cursor**, **keystroke display**, and **auto-slowdown** directly into test video recordings, making them readable by humans and AI (e.g. Gemini video analysis).
 
+## Demos
+
+### Dashboard — nav clicks, Ctrl+K search, modal form typing
+
+<video src="https://raw.githubusercontent.com/snomiao/qa-hud/main/docs/assets/01-dashboard.webm" controls muted width="100%"></video>
+
+### Code Editor — typing code, Ctrl+S/Z/A, Shift+Arrow selection, tab switching
+
+<video src="https://raw.githubusercontent.com/snomiao/qa-hud/main/docs/assets/02-code-editor.webm" controls muted width="100%"></video>
+
+### E-commerce Checkout — browse products, add to cart, fill payment form, pay
+
+<video src="https://raw.githubusercontent.com/snomiao/qa-hud/main/docs/assets/03-checkout.webm" controls muted width="100%"></video>
+
 ## Problem
 
 Playwright's video recording doesn't capture the browser cursor or keyboard input. Tests run too fast for meaningful video review.
@@ -15,18 +29,15 @@ Playwright's video recording doesn't capture the browser cursor or keyboard inpu
 - 🐢 **Auto-slowdown** — configurable delays after actions for human-readable recordings
 - 🔌 **Non-invasive** — multiple integration approaches, from zero-change to one-line
 
-## Integration Approaches
+## Quick Start
 
-### Approach 1: Import replacement (simplest)
-
-```ts
-// Change this:
-import { test, expect } from '@playwright/test';
-// To this:
-import { test, expect } from 'qa-hud';
+```bash
+npm install qa-hud
 ```
 
-### Approach 2: Config helper (zero test-file changes) ⭐
+### Zero-change setup (recommended) ⭐
+
+Add one line to your `playwright.config.ts` — no test files need to change:
 
 ```ts
 // playwright.config.ts
@@ -38,13 +49,24 @@ export default withQaHud(defineConfig({
 }));
 ```
 
-### Approach 3: CLI preload (zero code changes)
+Your existing tests keep using `import { test } from '@playwright/test'` — the HUD is injected automatically.
+
+### Alternative: CLI flag (zero code changes at all)
 
 ```bash
 NODE_OPTIONS="--require qa-hud/register" npx playwright test
 ```
 
-### Approach 4: Programmatic (full control)
+### Alternative: Import replacement
+
+```ts
+// Change this:
+import { test, expect } from '@playwright/test';
+// To this:
+import { test, expect } from 'qa-hud';
+```
+
+### Alternative: Programmatic (full control)
 
 ```ts
 import { test as base } from '@playwright/test';
@@ -61,7 +83,13 @@ const test = base.extend({
 ## Configuration
 
 ```ts
-// Via test.use (Approach 1)
+// Via withQaHud (recommended)
+export default withQaHud(defineConfig({ ... }), {
+  actionDelay: 200,
+  cursorStyle: 'dot',
+});
+
+// Via test.use (import replacement approach)
 test.use({
   qaHud: {
     cursor: true,            // show cursor overlay (default: true)
@@ -72,13 +100,7 @@ test.use({
   },
 });
 
-// Via withQaHud (Approach 2)
-export default withQaHud(defineConfig({ ... }), {
-  actionDelay: 200,
-  cursorStyle: 'dot',
-});
-
-// Via env vars (Approach 3)
+// Via env vars (CLI approach)
 QA_HUD_CURSOR=0 QA_HUD_DELAY=200 NODE_OPTIONS="--require qa-hud/register" npx playwright test
 ```
 
