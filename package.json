@@ -27,7 +27,7 @@
     "demo": "npx playwright test tests/demo.spec.ts --headed"
   },
   "publishConfig": {
-    "provenance": true
+    "access": "public"
   },
   "release": {
     "branches": [
