@@ -1,0 +1,36 @@
+{
+  "name": "qa-hud",
+  "version": "0.1.0",
+  "description": "Playwright HUD plugin — shows cursor, keystrokes, and auto-slowdown in test video recordings",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./register": "./register.cjs",
+    "./config": {
+      "import": "./dist/config.js",
+      "types": "./dist/config.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npx playwright test",
+    "demo": "npx playwright test tests/demo.spec.ts --headed"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^25.5.2",
+    "typescript": "^5.7.0"
+  }
+}
