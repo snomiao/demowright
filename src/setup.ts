@@ -5,11 +5,24 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { generateListenerScript, getDomInjector, type HudOptions } from "./hud-overlay.js";
 import { generateAudioCaptureScript } from "./audio-capture.js";
 import { AudioWriter } from "./audio-writer.js";
+import { registerHudPage } from "./hud-registry.js";
+
+/**
+ * TTS provider for narrate().
+ * - string: URL template — %s is replaced with encodeURIComponent(text).
+ *   Must return audio (mp3/wav/ogg).
+ *   Example: "https://api.example.com/tts?text=%s"
+ * - function: receives text, returns audio Buffer/ArrayBuffer.
+ * - false: disabled (falls back to speechSynthesis, which may not work headless).
+ */
+export type TtsProvider = false | string | ((text: string) => Promise<Buffer | ArrayBuffer>);
 
 export type QaHudOptions = HudOptions & {
   actionDelay: number;
   /** Enable audio capture via Web Audio API. Set to a file path to save WAV. */
   audio: false | string;
+  /** TTS provider for narrate(). See TtsProvider type. */
+  tts: TtsProvider;
 };
 
 export const defaultOptions: QaHudOptions = {
@@ -19,6 +32,7 @@ export const defaultOptions: QaHudOptions = {
   keyFadeMs: 1500,
   actionDelay: 120,
   audio: false,
+  tts: false,
 };
 
 /**
@@ -51,6 +65,7 @@ export async function applyHud(
   const domInjector = getDomInjector();
 
   function setupPage(page: Page) {
+    registerHudPage(page, { tts: opts.tts });
     wrapNavigation(page, domInjector, hudOpts);
     if (opts.actionDelay > 0) {
       patchPageDelay(page, opts.actionDelay);
@@ -172,12 +187,9 @@ function patchPageDelay(page: Page, delay: number) {
  */
 async function setupAudioCapture(page: Page, writer: AudioWriter) {
   try {
-    await page.exposeFunction(
-      "__qaHudAudioChunk",
-      (samples: number[], sampleRate: number) => {
-        writer.addChunk(samples, sampleRate);
-      }
-    );
+    await page.exposeFunction("__qaHudAudioChunk", (samples: number[], sampleRate: number) => {
+      writer.addChunk(samples, sampleRate);
+    });
   } catch {
     // exposeFunction may fail if already exposed on this page (e.g. SPA navigation)
   }

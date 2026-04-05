@@ -5,7 +5,7 @@ export default withQaHud(
   defineConfig({
     testDir: ".",
     outputDir: "../tmp",
-    timeout: 60_000,
+    timeout: 120_000,
     use: {
       video: { mode: "on", size: { width: 1280, height: 720 } },
       viewport: { width: 1280, height: 720 },

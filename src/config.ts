@@ -34,6 +34,7 @@ export function withQaHud(
     process.env.QA_HUD_CURSOR_STYLE = opts.cursorStyle;
   if (opts.keyFadeMs !== defaultOptions.keyFadeMs)
     process.env.QA_HUD_KEY_FADE = String(opts.keyFadeMs);
+  if (typeof opts.tts === "string") process.env.QA_HUD_TTS = opts.tts;
 
   // Inject --require into NODE_OPTIONS so it runs in every worker
   const flag = `--require ${registerPath}`;

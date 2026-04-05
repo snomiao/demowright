@@ -5,6 +5,7 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
+import { moveTo, moveToEl, clickEl, typeKeys, hudWait, subtitle } from "../src/helpers.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -121,178 +122,87 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => server?.close());
 
-// Helpers
-async function moveTo(page: any, x: number, y: number) {
-  const state = await page.evaluate(() => ({
-    x: (window as any).__qaHud?.cx ?? 0,
-    y: (window as any).__qaHud?.cy ?? 0,
-  }));
-  const steps = 10;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    await page.evaluate(
-      ([mx, my]: [number, number]) => {
-        document.dispatchEvent(
-          new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true }),
-        );
-      },
-      [state.x + (x - state.x) * t, state.y + (y - state.y) * t] as [number, number],
-    );
-    await page.waitForTimeout(20);
-  }
-}
-async function moveToEl(page: any, sel: string) {
-  const c = await page.evaluate((s: string) => {
-    const r = document.querySelector(s)!.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  }, sel);
-  await moveTo(page, c.x, c.y);
-  return c;
-}
-async function clickAt(page: any, x: number, y: number) {
-  await page.evaluate(
-    ([mx, my]: [number, number]) => {
-      document.dispatchEvent(
-        new MouseEvent("mousedown", { clientX: mx, clientY: my, bubbles: true }),
-      );
-      setTimeout(
-        () =>
-          document.dispatchEvent(
-            new MouseEvent("mouseup", { clientX: mx, clientY: my, bubbles: true }),
-          ),
-        60,
-      );
-    },
-    [x, y] as [number, number],
-  );
-  await page.waitForTimeout(100);
-}
-async function clickEl(page: any, sel: string) {
-  const c = await moveToEl(page, sel);
-  await page.waitForTimeout(150);
-  await clickAt(page, c.x, c.y);
-  await page.evaluate((s: string) => (document.querySelector(s) as HTMLElement)?.click(), sel);
-}
-async function typeKeys(page: any, text: string, delay = 70, inputSel?: string) {
-  for (let i = 0; i < text.length; i++) {
-    await page.evaluate(
-      ([k, sel, partial]: [string, string | undefined, string]) => {
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-        // Also update the focused input so text appears in the field
-        const el = sel ? document.querySelector(sel) : document.activeElement;
-        if (el && "value" in el) (el as HTMLInputElement).value = partial;
-      },
-      [text[i], inputSel, text.slice(0, i + 1)] as [string, string | undefined, string],
-    );
-    await page.waitForTimeout(delay);
-  }
-}
-async function pressKey(page: any, key: string, modifiers: Record<string, boolean> = {}) {
-  for (const mod of Object.keys(modifiers)) {
-    if (modifiers[mod])
-      await page.evaluate(
-        (k: string) =>
-          document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })),
-        mod,
-      );
-  }
-  await page.waitForTimeout(100);
-  await page.evaluate(
-    ([k, m]: [string, Record<string, boolean>]) => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: k, ...m, bubbles: true }));
-    },
-    [
-      key,
-      Object.fromEntries(
-        Object.entries(modifiers).map(([k, v]) => [
-          k.replace("Control", "ctrl").replace("Shift", "shift").replace("Alt", "alt") + "Key",
-          v,
-        ]),
-      ),
-    ] as [string, any],
-  );
-  await page.waitForTimeout(150);
-  for (const mod of Object.keys(modifiers)) {
-    if (modifiers[mod])
-      await page.evaluate(
-        (k: string) =>
-          document.dispatchEvent(new KeyboardEvent("keyup", { key: k, bubbles: true })),
-        mod,
-      );
-  }
-  await page.waitForTimeout(100);
-}
-
 test("dashboard — full interaction demo", async ({ page }) => {
   await page.goto(baseUrl);
-  await page.waitForTimeout(600);
+  await hudWait(page, 600);
 
   // 1. Browse nav tabs
+  await subtitle(page, "Navigating between tabs");
   await clickEl(page, "#nav-analytics");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
   await clickEl(page, "#nav-reports");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
   await clickEl(page, "#nav-overview");
-  await page.waitForTimeout(400);
+  await hudWait(page, 400);
 
   // 2. Hover stat cards
+  await subtitle(page, "Reviewing dashboard metrics");
   for (const id of ["#s1", "#s2", "#s3", "#s4"]) {
     await moveToEl(page, id);
-    await page.waitForTimeout(250);
+    await hudWait(page, 250);
   }
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
 
   // 3. Ctrl+K to focus search
-  await pressKey(page, "k", { Control: true });
-  await page.waitForTimeout(200);
-  await moveToEl(page, "#search");
-  await clickAt(
-    page,
-    await page.evaluate(() => {
-      const r = document.querySelector("#search")!.getBoundingClientRect();
-      return r.x + r.width / 2;
-    }),
-    24,
+  await subtitle(page, "Using keyboard shortcut Ctrl+K");
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", bubbles: true })),
   );
-  await page.waitForTimeout(200);
+  await hudWait(page, 100);
+  await page.evaluate(() =>
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
+    ),
+  );
+  await hudWait(page, 150);
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true })),
+  );
+  await hudWait(page, 100);
+  await clickEl(page, "#search");
+  await hudWait(page, 200);
   await typeKeys(page, "orders", 80, "#search");
-  await page.waitForTimeout(400);
+  await hudWait(page, 400);
 
   // 4. Press Escape to clear
   await page.evaluate(() => {
     (document.querySelector("#search") as HTMLInputElement).value = "";
   });
-  await pressKey(page, "Escape");
-  await page.waitForTimeout(300);
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  await hudWait(page, 300);
 
   // 5. Hover table rows
   for (let i = 1; i <= 4; i++) {
     await moveToEl(page, `table tbody tr:nth-child(${i}) td:nth-child(2)`);
-    await page.waitForTimeout(200);
+    await hudWait(page, 200);
   }
 
   // 6. Click "+ New Order" button
   await clickEl(page, "#add-btn");
-  await page.waitForTimeout(500);
+  await hudWait(page, 500);
 
   // 7. Fill the modal form
-  const custC = await moveToEl(page, "#m-customer");
-  await clickAt(page, custC.x, custC.y);
+  await subtitle(page, "Creating a new order");
+  await clickEl(page, "#m-customer");
   await page.evaluate(() => (document.querySelector("#m-customer") as HTMLInputElement).focus());
-  await page.waitForTimeout(150);
+  await hudWait(page, 150);
   await typeKeys(page, "Eve Wilson", 70, "#m-customer");
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
 
   // Tab to next field
-  await pressKey(page, "Tab");
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+  );
   await page.evaluate(() => (document.querySelector("#m-amount") as HTMLInputElement).focus());
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
   await typeKeys(page, "199.99", 70, "#m-amount");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
 
   // 8. Click Save
   await clickEl(page, "#m-save");
-  await page.waitForTimeout(600);
+  await hudWait(page, 600);
 
   expect(await page.evaluate(() => !!document.querySelector("[data-qa-hud]"))).toBe(true);
 });

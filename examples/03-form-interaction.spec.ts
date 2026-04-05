@@ -5,6 +5,7 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
+import { moveToEl, clickEl, typeKeys, hudWait, annotate } from "../src/helpers.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -113,140 +114,84 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => server?.close());
 
-async function moveTo(page: any, x: number, y: number) {
-  const s = await page.evaluate(() => ({
-    x: (window as any).__qaHud?.cx ?? 0,
-    y: (window as any).__qaHud?.cy ?? 0,
-  }));
-  for (let i = 1; i <= 10; i++) {
-    const t = i / 10;
-    await page.evaluate(
-      ([mx, my]: [number, number]) =>
-        document.dispatchEvent(
-          new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true }),
-        ),
-      [s.x + (x - s.x) * t, s.y + (y - s.y) * t] as [number, number],
-    );
-    await page.waitForTimeout(20);
-  }
-}
-async function moveToEl(page: any, sel: string) {
-  const c = await page.evaluate((s: string) => {
-    const r = document.querySelector(s)!.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  }, sel);
-  await moveTo(page, c.x, c.y);
-  return c;
-}
-async function clickEl(page: any, sel: string) {
-  const c = await moveToEl(page, sel);
-  await page.waitForTimeout(150);
-  await page.evaluate(
-    ([x, y]: [number, number]) => {
-      document.dispatchEvent(
-        new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true }),
-      );
-      setTimeout(
-        () =>
-          document.dispatchEvent(
-            new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true }),
-          ),
-        60,
-      );
-    },
-    [c.x, c.y] as [number, number],
-  );
-  await page.evaluate((s: string) => (document.querySelector(s) as HTMLElement)?.click(), sel);
-  await page.waitForTimeout(100);
-}
-async function typeKeys(page: any, text: string, delay = 65, inputSel?: string) {
-  for (let i = 0; i < text.length; i++) {
-    await page.evaluate(
-      ([k, sel, partial]: [string, string | undefined, string]) => {
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-        const el = sel ? document.querySelector(sel) : document.activeElement;
-        if (el && "value" in el) (el as HTMLInputElement).value = partial;
-      },
-      [text[i], inputSel, text.slice(0, i + 1)] as [string, string | undefined, string],
-    );
-    await page.waitForTimeout(delay);
-  }
-}
-
 test("e-commerce checkout — browse, add to cart, pay", async ({ page }) => {
   await page.goto(baseUrl);
-  await page.waitForTimeout(600);
+  await hudWait(page, 600);
 
   // 1. Hover products
+  await annotate(page, "Browsing the product catalog");
   await moveToEl(page, ".product:nth-child(1)");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
   await moveToEl(page, ".product:nth-child(2)");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
   await moveToEl(page, ".product:nth-child(3)");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
 
   // 2. Add headphones to cart
+  await annotate(page, "Adding items to the shopping cart");
   await clickEl(page, ".product:nth-child(1) .add-btn");
-  await page.waitForTimeout(400);
+  await hudWait(page, 400);
 
   // 3. Add smart watch
   await clickEl(page, ".product:nth-child(2) .add-btn");
-  await page.waitForTimeout(400);
+  await hudWait(page, 400);
 
   // 4. Open cart / checkout
+  await annotate(page, "Opening the checkout form");
   await clickEl(page, "#cart-btn");
-  await page.waitForTimeout(500);
+  await hudWait(page, 500);
 
   // 5. Fill checkout form
+  await annotate(page, "Filling in customer details");
   await clickEl(page, "#f-name");
-  await page.evaluate(() => (document.querySelector("#f-name") as HTMLInputElement).focus());
-  await page.waitForTimeout(150);
+  await hudWait(page, 150);
   await typeKeys(page, "Jane Doe", 65, "#f-name");
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
 
   // Tab to email
   await page.evaluate(() =>
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
   );
   await page.evaluate(() => (document.querySelector("#f-email") as HTMLInputElement).focus());
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
   await moveToEl(page, "#f-email");
-  await page.waitForTimeout(100);
+  await hudWait(page, 100);
   await typeKeys(page, "jane@example.com", 55, "#f-email");
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
 
   // Tab to card number
   await page.evaluate(() =>
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
   );
   await page.evaluate(() => (document.querySelector("#f-card") as HTMLInputElement).focus());
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
   await moveToEl(page, "#f-card");
-  await page.waitForTimeout(100);
+  await hudWait(page, 100);
   await typeKeys(page, "4242 4242 4242 4242", 50, "#f-card");
-  await page.waitForTimeout(200);
+  await hudWait(page, 200);
 
   // Tab to expiry
   await page.evaluate(() =>
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
   );
   await page.evaluate(() => (document.querySelector("#f-exp") as HTMLInputElement).focus());
-  await page.waitForTimeout(150);
+  await hudWait(page, 150);
   await typeKeys(page, "12/28", 70, "#f-exp");
-  await page.waitForTimeout(150);
+  await hudWait(page, 150);
 
   // Tab to CVC
   await page.evaluate(() =>
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
   );
   await page.evaluate(() => (document.querySelector("#f-cvc") as HTMLInputElement).focus());
-  await page.waitForTimeout(150);
+  await hudWait(page, 150);
   await typeKeys(page, "456", 80, "#f-cvc");
-  await page.waitForTimeout(300);
+  await hudWait(page, 300);
 
   // 6. Click Pay Now
+  await annotate(page, "Completing the payment");
   await clickEl(page, "#pay-btn");
-  await page.waitForTimeout(800);
+  await hudWait(page, 800);
 
   // Verify success
   const success = await page.evaluate(() => document.getElementById("success-msg")?.style.display);

@@ -67,6 +67,7 @@ if (process.env.QA_HUD === "0") {
         cursorStyle: process.env.QA_HUD_CURSOR_STYLE || "default",
         keyFadeMs: Number(process.env.QA_HUD_KEY_FADE) || 1500,
         actionDelay: Number(process.env.QA_HUD_DELAY) || 120,
+        tts: process.env.QA_HUD_TTS || false,
       };
       await applyHudCache(context, opts);
     } catch (e) {
