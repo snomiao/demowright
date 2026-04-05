@@ -18,12 +18,21 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "register.cjs"
   ],
   "scripts": {
     "build": "tsc",
     "test": "npx playwright test",
     "demo": "npx playwright test tests/demo.spec.ts --headed"
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "release": {
+    "branches": [
+      "main"
+    ]
   },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"
@@ -31,6 +40,7 @@
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/node": "^25.5.2",
+    "semantic-release": "^25.0.3",
     "typescript": "^5.7.0"
   }
 }
