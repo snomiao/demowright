@@ -17,9 +17,14 @@
       "types": "./dist/config.d.ts"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snomiao/qa-hud.git"
+  },
   "files": [
     "dist",
-    "register.cjs"
+    "register.cjs",
+    "media"
   ],
   "scripts": {
     "build": "tsc",
