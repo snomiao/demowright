@@ -7,4 +7,5 @@ export { test } from "./fixture.js";
 export { applyHud } from "./setup.js";
 
 export type { QaHudOptions } from "./setup.js";
+export { AudioWriter } from "./audio-writer.js";
 export { expect } from "@playwright/test";
