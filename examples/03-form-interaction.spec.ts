@@ -104,33 +104,71 @@ const HTML = `<!DOCTYPE html>
 let server: http.Server;
 let baseUrl: string;
 test.beforeAll(async () => {
-  server = http.createServer((_, res) => { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(HTML); });
+  server = http.createServer((_, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HTML);
+  });
   await new Promise<void>((r) => server.listen(0, r));
   baseUrl = `http://localhost:${(server.address() as any).port}`;
 });
 test.afterAll(() => server?.close());
 
 async function moveTo(page: any, x: number, y: number) {
-  const s = await page.evaluate(() => ({ x: (window as any).__qaHud?.cx ?? 0, y: (window as any).__qaHud?.cy ?? 0 }));
-  for (let i = 1; i <= 10; i++) { const t = i / 10; await page.evaluate(([mx, my]: [number, number]) => document.dispatchEvent(new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true })), [s.x + (x - s.x) * t, s.y + (y - s.y) * t] as [number, number]); await page.waitForTimeout(20); }
+  const s = await page.evaluate(() => ({
+    x: (window as any).__qaHud?.cx ?? 0,
+    y: (window as any).__qaHud?.cy ?? 0,
+  }));
+  for (let i = 1; i <= 10; i++) {
+    const t = i / 10;
+    await page.evaluate(
+      ([mx, my]: [number, number]) =>
+        document.dispatchEvent(
+          new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true }),
+        ),
+      [s.x + (x - s.x) * t, s.y + (y - s.y) * t] as [number, number],
+    );
+    await page.waitForTimeout(20);
+  }
 }
 async function moveToEl(page: any, sel: string) {
-  const c = await page.evaluate((s: string) => { const r = document.querySelector(s)!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, sel);
-  await moveTo(page, c.x, c.y); return c;
+  const c = await page.evaluate((s: string) => {
+    const r = document.querySelector(s)!.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, sel);
+  await moveTo(page, c.x, c.y);
+  return c;
 }
 async function clickEl(page: any, sel: string) {
-  const c = await moveToEl(page, sel); await page.waitForTimeout(150);
-  await page.evaluate(([x, y]: [number, number]) => { document.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true })); setTimeout(() => document.dispatchEvent(new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true })), 60); }, [c.x, c.y] as [number, number]);
+  const c = await moveToEl(page, sel);
+  await page.waitForTimeout(150);
+  await page.evaluate(
+    ([x, y]: [number, number]) => {
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true }),
+      );
+      setTimeout(
+        () =>
+          document.dispatchEvent(
+            new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true }),
+          ),
+        60,
+      );
+    },
+    [c.x, c.y] as [number, number],
+  );
   await page.evaluate((s: string) => (document.querySelector(s) as HTMLElement)?.click(), sel);
   await page.waitForTimeout(100);
 }
 async function typeKeys(page: any, text: string, delay = 65, inputSel?: string) {
   for (let i = 0; i < text.length; i++) {
-    await page.evaluate(([k, sel, partial]: [string, string | undefined, string]) => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-      const el = sel ? document.querySelector(sel) : document.activeElement;
-      if (el && "value" in el) (el as HTMLInputElement).value = partial;
-    }, [text[i], inputSel, text.slice(0, i + 1)] as [string, string | undefined, string]);
+    await page.evaluate(
+      ([k, sel, partial]: [string, string | undefined, string]) => {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+        const el = sel ? document.querySelector(sel) : document.activeElement;
+        if (el && "value" in el) (el as HTMLInputElement).value = partial;
+      },
+      [text[i], inputSel, text.slice(0, i + 1)] as [string, string | undefined, string],
+    );
     await page.waitForTimeout(delay);
   }
 }
@@ -167,7 +205,9 @@ test("e-commerce checkout — browse, add to cart, pay", async ({ page }) => {
   await page.waitForTimeout(200);
 
   // Tab to email
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+  );
   await page.evaluate(() => (document.querySelector("#f-email") as HTMLInputElement).focus());
   await page.waitForTimeout(200);
   await moveToEl(page, "#f-email");
@@ -176,7 +216,9 @@ test("e-commerce checkout — browse, add to cart, pay", async ({ page }) => {
   await page.waitForTimeout(200);
 
   // Tab to card number
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+  );
   await page.evaluate(() => (document.querySelector("#f-card") as HTMLInputElement).focus());
   await page.waitForTimeout(200);
   await moveToEl(page, "#f-card");
@@ -185,14 +227,18 @@ test("e-commerce checkout — browse, add to cart, pay", async ({ page }) => {
   await page.waitForTimeout(200);
 
   // Tab to expiry
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+  );
   await page.evaluate(() => (document.querySelector("#f-exp") as HTMLInputElement).focus());
   await page.waitForTimeout(150);
   await typeKeys(page, "12/28", 70, "#f-exp");
   await page.waitForTimeout(150);
 
   // Tab to CVC
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+  );
   await page.evaluate(() => (document.querySelector("#f-cvc") as HTMLInputElement).focus());
   await page.waitForTimeout(150);
   await typeKeys(page, "456", 80, "#f-cvc");
@@ -203,8 +249,6 @@ test("e-commerce checkout — browse, add to cart, pay", async ({ page }) => {
   await page.waitForTimeout(800);
 
   // Verify success
-  const success = await page.evaluate(() =>
-    document.getElementById("success-msg")?.style.display
-  );
+  const success = await page.evaluate(() => document.getElementById("success-msg")?.style.display);
   expect(success).toBe("block");
 });

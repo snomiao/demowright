@@ -68,11 +68,15 @@ test("full demo — cursor, keyboard, and interactions", async ({ page }) => {
 
   // Mouse movement simulation
   await page.evaluate(() => {
-    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 400, clientY: 100, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousemove", { clientX: 400, clientY: 100, bubbles: true }),
+    );
   });
   await page.waitForTimeout(300);
   await page.evaluate(() => {
-    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 200, clientY: 250, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousemove", { clientX: 200, clientY: 250, bubbles: true }),
+    );
   });
   await page.waitForTimeout(200);
 
@@ -80,9 +84,15 @@ test("full demo — cursor, keyboard, and interactions", async ({ page }) => {
   await page.evaluate(() => {
     const inp = document.getElementById("name") as HTMLInputElement;
     inp.focus();
-    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 300, clientY: 220, bubbles: true }));
-    document.dispatchEvent(new MouseEvent("mousedown", { clientX: 300, clientY: 220, bubbles: true }));
-    document.dispatchEvent(new MouseEvent("mouseup", { clientX: 300, clientY: 220, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousemove", { clientX: 300, clientY: 220, bubbles: true }),
+    );
+    document.dispatchEvent(
+      new MouseEvent("mousedown", { clientX: 300, clientY: 220, bubbles: true }),
+    );
+    document.dispatchEvent(
+      new MouseEvent("mouseup", { clientX: 300, clientY: 220, bubbles: true }),
+    );
   });
   await page.waitForTimeout(300);
 
@@ -103,24 +113,36 @@ test("full demo — cursor, keyboard, and interactions", async ({ page }) => {
 
   // Move to buttons and click
   await page.evaluate(() => {
-    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 150, clientY: 380, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousemove", { clientX: 150, clientY: 380, bubbles: true }),
+    );
   });
   await page.waitForTimeout(200);
   await page.evaluate(() => {
-    document.dispatchEvent(new MouseEvent("mousedown", { clientX: 150, clientY: 380, bubbles: true }));
-    document.dispatchEvent(new MouseEvent("mouseup", { clientX: 150, clientY: 380, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousedown", { clientX: 150, clientY: 380, bubbles: true }),
+    );
+    document.dispatchEvent(
+      new MouseEvent("mouseup", { clientX: 150, clientY: 380, bubbles: true }),
+    );
     (document.getElementById("btn1") as HTMLElement).click();
   });
   await page.waitForTimeout(400);
 
   // Click button 2
   await page.evaluate(() => {
-    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 280, clientY: 380, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousemove", { clientX: 280, clientY: 380, bubbles: true }),
+    );
   });
   await page.waitForTimeout(200);
   await page.evaluate(() => {
-    document.dispatchEvent(new MouseEvent("mousedown", { clientX: 280, clientY: 380, bubbles: true }));
-    document.dispatchEvent(new MouseEvent("mouseup", { clientX: 280, clientY: 380, bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("mousedown", { clientX: 280, clientY: 380, bubbles: true }),
+    );
+    document.dispatchEvent(
+      new MouseEvent("mouseup", { clientX: 280, clientY: 380, bubbles: true }),
+    );
     (document.getElementById("btn2") as HTMLElement).click();
   });
   await page.waitForTimeout(400);
@@ -131,7 +153,9 @@ test("full demo — cursor, keyboard, and interactions", async ({ page }) => {
   });
   await page.waitForTimeout(200);
   await page.evaluate(() => {
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }),
+    );
   });
   await page.waitForTimeout(300);
   await page.evaluate(() => {
@@ -145,7 +169,9 @@ test("full demo — cursor, keyboard, and interactions", async ({ page }) => {
   });
   await page.waitForTimeout(150);
   await page.evaluate(() => {
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }),
+    );
   });
   await page.waitForTimeout(300);
   await page.evaluate(() => {
@@ -154,8 +180,6 @@ test("full demo — cursor, keyboard, and interactions", async ({ page }) => {
   await page.waitForTimeout(500);
 
   // Verify HUD is present
-  const hudExists = await page.evaluate(
-    () => !!document.querySelector("[data-qa-hud]")
-  );
+  const hudExists = await page.evaluate(() => !!document.querySelector("[data-qa-hud]"));
   expect(hudExists).toBe(true);
 });

@@ -43,12 +43,14 @@ Add one line to your `playwright.config.ts` — no test files need to change:
 
 ```ts
 // playwright.config.ts
-import { defineConfig } from '@playwright/test';
-import { withQaHud } from 'qa-hud/config';
+import { defineConfig } from "@playwright/test";
+import { withQaHud } from "qa-hud/config";
 
-export default withQaHud(defineConfig({
-  use: { video: 'on' },
-}));
+export default withQaHud(
+  defineConfig({
+    use: { video: "on" },
+  }),
+);
 ```
 
 Your existing tests keep using `import { test } from '@playwright/test'` — the HUD is injected automatically.
@@ -63,16 +65,16 @@ NODE_OPTIONS="--require qa-hud/register" npx playwright test
 
 ```ts
 // Change this:
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 // To this:
-import { test, expect } from 'qa-hud';
+import { test, expect } from "qa-hud";
 ```
 
 ### Alternative: Programmatic (full control)
 
 ```ts
-import { test as base } from '@playwright/test';
-import { applyHud } from 'qa-hud';
+import { test as base } from "@playwright/test";
+import { applyHud } from "qa-hud";
 
 const test = base.extend({
   context: async ({ context }, use) => {
@@ -106,14 +108,14 @@ test.use({
 QA_HUD_CURSOR=0 QA_HUD_DELAY=200 NODE_OPTIONS="--require qa-hud/register" npx playwright test
 ```
 
-| Env Var | Description | Default |
-|---|---|---|
-| `QA_HUD=0` | Disable HUD entirely | enabled |
-| `QA_HUD_CURSOR=0` | Disable cursor overlay | enabled |
-| `QA_HUD_KEYBOARD=0` | Disable keyboard display | enabled |
-| `QA_HUD_DELAY=200` | Action delay in ms | `120` |
-| `QA_HUD_CURSOR_STYLE=dot` | Cursor style | `default` |
-| `QA_HUD_KEY_FADE=2000` | Key label fade time in ms | `1500` |
+| Env Var                   | Description               | Default   |
+| ------------------------- | ------------------------- | --------- |
+| `QA_HUD=0`                | Disable HUD entirely      | enabled   |
+| `QA_HUD_CURSOR=0`         | Disable cursor overlay    | enabled   |
+| `QA_HUD_KEYBOARD=0`       | Disable keyboard display  | enabled   |
+| `QA_HUD_DELAY=200`        | Action delay in ms        | `120`     |
+| `QA_HUD_CURSOR_STYLE=dot` | Cursor style              | `default` |
+| `QA_HUD_KEY_FADE=2000`    | Key label fade time in ms | `1500`    |
 
 ## How It Works
 

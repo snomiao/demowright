@@ -51,13 +51,11 @@ test.use({
 
 test("HUD overlay is injected after page load", async ({ page }) => {
   await page.goto(baseUrl);
-  const hudExists = await page.evaluate(
-    () => !!document.querySelector("[data-qa-hud]")
-  );
+  const hudExists = await page.evaluate(() => !!document.querySelector("[data-qa-hud]"));
   expect(hudExists).toBe(true);
 
   const cursorExists = await page.evaluate(
-    () => !!document.querySelector("[data-qa-hud] .qa-cursor")
+    () => !!document.querySelector("[data-qa-hud] .qa-cursor"),
   );
   expect(cursorExists).toBe(true);
 });
@@ -68,7 +66,7 @@ test("cursor tracks mouse and keyboard shows keys", async ({ page }) => {
   // Simulate mouse movement
   await page.evaluate(() => {
     document.dispatchEvent(
-      new MouseEvent("mousemove", { clientX: 250, clientY: 150, bubbles: true })
+      new MouseEvent("mousemove", { clientX: 250, clientY: 150, bubbles: true }),
     );
   });
   await page.waitForTimeout(50);
@@ -82,24 +80,20 @@ test("cursor tracks mouse and keyboard shows keys", async ({ page }) => {
   // Simulate click ripple
   await page.evaluate(() => {
     document.dispatchEvent(
-      new MouseEvent("mousedown", { clientX: 250, clientY: 150, bubbles: true })
+      new MouseEvent("mousedown", { clientX: 250, clientY: 150, bubbles: true }),
     );
   });
   await page.waitForTimeout(50);
-  const ripple = await page.evaluate(
-    () => !!document.querySelector("[data-qa-hud] .qa-ripple")
-  );
+  const ripple = await page.evaluate(() => !!document.querySelector("[data-qa-hud] .qa-ripple"));
   expect(ripple).toBe(true);
 
   // Simulate key press
   await page.evaluate(() => {
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
-    );
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
   await page.waitForTimeout(50);
   const keyCount = await page.evaluate(
-    () => document.querySelectorAll("[data-qa-hud] .qa-key").length
+    () => document.querySelectorAll("[data-qa-hud] .qa-key").length,
   );
   expect(keyCount).toBeGreaterThan(0);
 });
@@ -108,38 +102,26 @@ test("modifier keys show persistent badges", async ({ page }) => {
   await page.goto(baseUrl);
 
   await page.evaluate(() => {
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Shift", bubbles: true })
-    );
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
   });
   await page.waitForTimeout(50);
   expect(
-    await page.evaluate(
-      () => !!document.querySelector("[data-qa-hud] .qa-key.modifier")
-    )
+    await page.evaluate(() => !!document.querySelector("[data-qa-hud] .qa-key.modifier")),
   ).toBe(true);
 
   await page.evaluate(() => {
-    document.dispatchEvent(
-      new KeyboardEvent("keyup", { key: "Shift", bubbles: true })
-    );
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
   });
   await page.waitForTimeout(50);
-  expect(
-    await page.evaluate(
-      () => !document.querySelector("[data-qa-hud] .qa-key.modifier")
-    )
-  ).toBe(true);
+  expect(await page.evaluate(() => !document.querySelector("[data-qa-hud] .qa-key.modifier"))).toBe(
+    true,
+  );
 });
 
 test("HUD does not block page interactions", async ({ page }) => {
   await page.goto(baseUrl);
 
-  await page.evaluate(
-    () => (document.querySelector("#btn1") as HTMLElement)?.click()
-  );
-  const result = await page.evaluate(
-    () => document.querySelector("#out")?.textContent
-  );
+  await page.evaluate(() => (document.querySelector("#btn1") as HTMLElement)?.click());
+  const result = await page.evaluate(() => document.querySelector("#out")?.textContent);
   expect(result).toBe("Button 1 clicked!");
 });

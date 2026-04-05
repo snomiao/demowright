@@ -8,15 +8,15 @@ This document compares all known approaches to add audio to Playwright test reco
 
 ## Summary Table
 
-| # | Approach | Audio Source | Headless | Cross-platform | Complexity | Sync Quality | Browser |
-|---|---|---|---|---|---|---|---|
-| 1 | [PulseAudio + ffmpeg](#1-pulseaudio--ffmpeg) | System/tab audio via virtual sink | ✅ | Linux only | Low | ⚠️ manual mux | Any |
-| 2 | [Web Audio API capture](#2-web-audio-api-capture-in-page) | In-page audio output | ✅ | ✅ | Medium | ✅ frame-level | Any |
-| 3 | [Chrome Extension (tabCapture)](#3-chrome-extension-tabcapture) | Tab audio stream | ❌ headed only | ✅ Chromium only | High | ✅ native | Chromium |
-| 4 | [puppeteer-stream](#4-puppeteer-stream) | Tab screencast + audio | ❌ headed only | ✅ Chromium only | Low | ✅ native | Chromium |
-| 5 | [Xvfb + ffmpeg screen recording](#5-xvfb--ffmpeg-full-screen-recording) | X11 display + PulseAudio | ✅ virtual display | Linux only | Medium | ✅ real-time | Any |
-| 6 | [CDP WebAudio domain](#6-cdp-webaudio-domain) | Metadata only | ✅ | ✅ | Low | N/A | Chromium |
-| 7 | [TTS narration overlay](#7-tts-narration-overlay-alternative) | Synthesized speech | ✅ | ✅ | Low | ✅ scripted | Any |
+| #   | Approach                                                                | Audio Source                      | Headless           | Cross-platform   | Complexity | Sync Quality   | Browser  |
+| --- | ----------------------------------------------------------------------- | --------------------------------- | ------------------ | ---------------- | ---------- | -------------- | -------- |
+| 1   | [PulseAudio + ffmpeg](#1-pulseaudio--ffmpeg)                            | System/tab audio via virtual sink | ✅                 | Linux only       | Low        | ⚠️ manual mux  | Any      |
+| 2   | [Web Audio API capture](#2-web-audio-api-capture-in-page)               | In-page audio output              | ✅                 | ✅               | Medium     | ✅ frame-level | Any      |
+| 3   | [Chrome Extension (tabCapture)](#3-chrome-extension-tabcapture)         | Tab audio stream                  | ❌ headed only     | ✅ Chromium only | High       | ✅ native      | Chromium |
+| 4   | [puppeteer-stream](#4-puppeteer-stream)                                 | Tab screencast + audio            | ❌ headed only     | ✅ Chromium only | Low        | ✅ native      | Chromium |
+| 5   | [Xvfb + ffmpeg screen recording](#5-xvfb--ffmpeg-full-screen-recording) | X11 display + PulseAudio          | ✅ virtual display | Linux only       | Medium     | ✅ real-time   | Any      |
+| 6   | [CDP WebAudio domain](#6-cdp-webaudio-domain)                           | Metadata only                     | ✅                 | ✅               | Low        | N/A            | Chromium |
+| 7   | [TTS narration overlay](#7-tts-narration-overlay-alternative)           | Synthesized speech                | ✅                 | ✅               | Low        | ✅ scripted    | Any      |
 
 ---
 
@@ -49,17 +49,19 @@ ffmpeg -i test-results/video.webm -i audio.wav -c:v copy -c:a aac -shortest outp
 **Integration with qa-hud fixture:**
 
 ```ts
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync } from "child_process";
 
 test.beforeAll(() => {
-  execSync('pactl load-module module-null-sink sink_name=pw_sink');
-  process.env.PULSE_SINK = 'pw_sink';
-  audioProcess = spawn('ffmpeg', ['-f', 'pulse', '-i', 'pw_sink.monitor', '-ac', '1', 'audio.wav']);
+  execSync("pactl load-module module-null-sink sink_name=pw_sink");
+  process.env.PULSE_SINK = "pw_sink";
+  audioProcess = spawn("ffmpeg", ["-f", "pulse", "-i", "pw_sink.monitor", "-ac", "1", "audio.wav"]);
 });
 
 test.afterAll(async () => {
   audioProcess.kill();
-  execSync('ffmpeg -i test-results/video.webm -i audio.wav -c:v copy -c:a aac -shortest output.mp4');
+  execSync(
+    "ffmpeg -i test-results/video.webm -i audio.wav -c:v copy -c:a aac -shortest output.mp4",
+  );
 });
 ```
 
@@ -76,7 +78,7 @@ test.afterAll(async () => {
 ```ts
 // In addInitScript — intercept AudioContext.destination
 const originalConnect = AudioNode.prototype.connect;
-AudioNode.prototype.connect = function(dest, ...args) {
+AudioNode.prototype.connect = function (dest, ...args) {
   if (dest === this.context.destination) {
     // Insert capture node before destination
     const processor = this.context.createScriptProcessor(4096, 2, 2);
@@ -96,7 +98,7 @@ AudioNode.prototype.connect = function(dest, ...args) {
 ```ts
 // Node side — collect audio chunks
 const chunks: Float32Array[] = [];
-await page.exposeFunction('__qaHudAudioChunk', (samples: number[]) => {
+await page.exposeFunction("__qaHudAudioChunk", (samples: number[]) => {
   chunks.push(new Float32Array(samples));
 });
 // After test: encode chunks to WAV and mux with video
@@ -114,7 +116,7 @@ class CaptureProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('capture-processor', CaptureProcessor);
+registerProcessor("capture-processor", CaptureProcessor);
 ```
 
 ---
@@ -132,8 +134,8 @@ registerProcessor('capture-processor', CaptureProcessor);
 const browser = await chromium.launch({
   headless: false,
   args: [
-    '--load-extension=/path/to/capture-extension',
-    '--disable-extensions-except=/path/to/capture-extension',
+    "--load-extension=/path/to/capture-extension",
+    "--disable-extensions-except=/path/to/capture-extension",
   ],
 });
 ```
@@ -143,18 +145,18 @@ const browser = await chromium.launch({
 chrome.action.onClicked.addListener(async (tab) => {
   const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
   // Send streamId to offscreen document for recording
-  chrome.runtime.sendMessage({ type: 'start', streamId });
+  chrome.runtime.sendMessage({ type: "start", streamId });
 });
 ```
 
 ```js
 // Extension offscreen.js
 const stream = await navigator.mediaDevices.getUserMedia({
-  audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
-  video: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
+  audio: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId } },
+  video: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId } },
 });
 
-const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
+const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9,opus" });
 recorder.start();
 // ... stop and download later
 ```
@@ -170,16 +172,16 @@ recorder.start();
 **Cons:** Puppeteer only (not Playwright), requires headed mode, Chromium only.
 
 ```ts
-import puppeteer from 'puppeteer';
-import { getStream } from 'puppeteer-stream';
-import fs from 'fs';
+import puppeteer from "puppeteer";
+import { getStream } from "puppeteer-stream";
+import fs from "fs";
 
 const browser = await puppeteer.launch({ headless: false });
 const page = await browser.newPage();
-await page.goto('https://example.com');
+await page.goto("https://example.com");
 
 const stream = await getStream(page, { audio: true, video: true });
-const file = fs.createWriteStream('recording.webm');
+const file = fs.createWriteStream("recording.webm");
 stream.pipe(file);
 
 // ... run test ...
@@ -246,14 +248,14 @@ kill $FFMPEG_PID
 
 ```ts
 const client = await page.context().newCDPSession(page);
-await client.send('WebAudio.enable');
+await client.send("WebAudio.enable");
 
-client.on('WebAudio.contextCreated', (event) => {
-  console.log('AudioContext created:', event.context);
+client.on("WebAudio.contextCreated", (event) => {
+  console.log("AudioContext created:", event.context);
 });
 
-client.on('WebAudio.audioNodeCreated', (event) => {
-  console.log('Audio node:', event.node.nodeType);
+client.on("WebAudio.audioNodeCreated", (event) => {
+  console.log("Audio node:", event.node.nodeType);
 });
 ```
 
@@ -268,13 +270,13 @@ client.on('WebAudio.audioNodeCreated', (event) => {
 **Cons:** Not real browser audio — synthetic narration only. Requires TTS engine.
 
 ```ts
-import { exec } from 'child_process';
+import { exec } from "child_process";
 
 // Generate narration for each test step
 const narrations = [
-  { time: 0, text: 'Opening the dashboard page' },
-  { time: 3, text: 'Clicking the search bar and typing orders' },
-  { time: 7, text: 'Opening the new order modal' },
+  { time: 0, text: "Opening the dashboard page" },
+  { time: 3, text: "Clicking the search bar and typing orders" },
+  { time: 7, text: "Opening the new order modal" },
 ];
 
 // After test: generate audio and mux
@@ -288,12 +290,12 @@ for (const n of narrations) {
 
 ## Recommendations
 
-| Use Case | Recommended Approach |
-|---|---|
-| **CI/Linux pipelines** | [#1 PulseAudio + ffmpeg](#1-pulseaudio--ffmpeg) — simplest, reliable |
-| **Capturing page audio precisely** | [#2 Web Audio API](#2-web-audio-api-capture-in-page) — cross-platform, headless |
-| **Full-fidelity tab recording** | [#3 Chrome Extension](#3-chrome-extension-tabcapture) or [#4 puppeteer-stream](#4-puppeteer-stream) |
-| **AI video analysis (like Gemini)** | [#7 TTS narration](#7-tts-narration-overlay-alternative) + qa-hud visual overlay — no audio needed |
-| **WYSIWYG recording for demos** | [#5 Xvfb + ffmpeg](#5-xvfb--ffmpeg-full-screen-recording) |
+| Use Case                            | Recommended Approach                                                                                |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **CI/Linux pipelines**              | [#1 PulseAudio + ffmpeg](#1-pulseaudio--ffmpeg) — simplest, reliable                                |
+| **Capturing page audio precisely**  | [#2 Web Audio API](#2-web-audio-api-capture-in-page) — cross-platform, headless                     |
+| **Full-fidelity tab recording**     | [#3 Chrome Extension](#3-chrome-extension-tabcapture) or [#4 puppeteer-stream](#4-puppeteer-stream) |
+| **AI video analysis (like Gemini)** | [#7 TTS narration](#7-tts-narration-overlay-alternative) + qa-hud visual overlay — no audio needed  |
+| **WYSIWYG recording for demos**     | [#5 Xvfb + ffmpeg](#5-xvfb--ffmpeg-full-screen-recording)                                           |
 
 For qa-hud's primary use case (making Playwright videos readable for AI analysis), **audio is usually not needed** — the visual HUD overlay (cursor + keyboard badges) provides all the context. If audio is required, approach #1 (PulseAudio) or #2 (Web Audio API) are the most practical to integrate as a qa-hud plugin.

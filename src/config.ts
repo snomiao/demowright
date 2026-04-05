@@ -17,7 +17,7 @@ export type { QaHudOptions };
 
 export function withQaHud(
   config: PlaywrightTestConfig,
-  options?: Partial<QaHudOptions>
+  options?: Partial<QaHudOptions>,
 ): PlaywrightTestConfig {
   const opts = { ...defaultOptions, ...options };
 

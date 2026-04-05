@@ -2,11 +2,7 @@
  * Core HUD setup logic — shared by all integration approaches.
  */
 import type { BrowserContext, Page } from "@playwright/test";
-import {
-  generateListenerScript,
-  getDomInjector,
-  type HudOptions,
-} from "./hud-overlay.js";
+import { generateListenerScript, getDomInjector, type HudOptions } from "./hud-overlay.js";
 
 export type QaHudOptions = HudOptions & {
   actionDelay: number;
@@ -25,7 +21,7 @@ export const defaultOptions: QaHudOptions = {
  */
 export async function applyHud(
   context: BrowserContext,
-  options?: Partial<QaHudOptions>
+  options?: Partial<QaHudOptions>,
 ): Promise<void> {
   const opts = { ...defaultOptions, ...options };
 
@@ -57,11 +53,7 @@ export async function applyHud(
 /**
  * Wraps page navigation methods to inject HUD DOM after each navigation.
  */
-function wrapNavigation(
-  page: Page,
-  domInjector: (opts: HudOptions) => void,
-  hudOpts: HudOptions
-) {
+function wrapNavigation(page: Page, domInjector: (opts: HudOptions) => void, hudOpts: HudOptions) {
   async function injectDom() {
     try {
       // Check if page is still usable before injecting

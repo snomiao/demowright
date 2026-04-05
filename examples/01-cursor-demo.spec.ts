@@ -112,7 +112,10 @@ const HTML = `<!DOCTYPE html>
 let server: http.Server;
 let baseUrl: string;
 test.beforeAll(async () => {
-  server = http.createServer((_, res) => { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(HTML); });
+  server = http.createServer((_, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HTML);
+  });
   await new Promise<void>((r) => server.listen(0, r));
   baseUrl = `http://localhost:${(server.address() as any).port}`;
 });
@@ -120,26 +123,48 @@ test.afterAll(() => server?.close());
 
 // Helpers
 async function moveTo(page: any, x: number, y: number) {
-  const state = await page.evaluate(() => ({ x: (window as any).__qaHud?.cx ?? 0, y: (window as any).__qaHud?.cy ?? 0 }));
+  const state = await page.evaluate(() => ({
+    x: (window as any).__qaHud?.cx ?? 0,
+    y: (window as any).__qaHud?.cy ?? 0,
+  }));
   const steps = 10;
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
-    await page.evaluate(([mx, my]: [number, number]) => {
-      document.dispatchEvent(new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true }));
-    }, [state.x + (x - state.x) * t, state.y + (y - state.y) * t] as [number, number]);
+    await page.evaluate(
+      ([mx, my]: [number, number]) => {
+        document.dispatchEvent(
+          new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true }),
+        );
+      },
+      [state.x + (x - state.x) * t, state.y + (y - state.y) * t] as [number, number],
+    );
     await page.waitForTimeout(20);
   }
 }
 async function moveToEl(page: any, sel: string) {
-  const c = await page.evaluate((s: string) => { const r = document.querySelector(s)!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, sel);
+  const c = await page.evaluate((s: string) => {
+    const r = document.querySelector(s)!.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, sel);
   await moveTo(page, c.x, c.y);
   return c;
 }
 async function clickAt(page: any, x: number, y: number) {
-  await page.evaluate(([mx, my]: [number, number]) => {
-    document.dispatchEvent(new MouseEvent("mousedown", { clientX: mx, clientY: my, bubbles: true }));
-    setTimeout(() => document.dispatchEvent(new MouseEvent("mouseup", { clientX: mx, clientY: my, bubbles: true })), 60);
-  }, [x, y] as [number, number]);
+  await page.evaluate(
+    ([mx, my]: [number, number]) => {
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: mx, clientY: my, bubbles: true }),
+      );
+      setTimeout(
+        () =>
+          document.dispatchEvent(
+            new MouseEvent("mouseup", { clientX: mx, clientY: my, bubbles: true }),
+          ),
+        60,
+      );
+    },
+    [x, y] as [number, number],
+  );
   await page.waitForTimeout(100);
 }
 async function clickEl(page: any, sel: string) {
@@ -150,26 +175,50 @@ async function clickEl(page: any, sel: string) {
 }
 async function typeKeys(page: any, text: string, delay = 70, inputSel?: string) {
   for (let i = 0; i < text.length; i++) {
-    await page.evaluate(([k, sel, partial]: [string, string | undefined, string]) => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-      // Also update the focused input so text appears in the field
-      const el = sel ? document.querySelector(sel) : document.activeElement;
-      if (el && "value" in el) (el as HTMLInputElement).value = partial;
-    }, [text[i], inputSel, text.slice(0, i + 1)] as [string, string | undefined, string]);
+    await page.evaluate(
+      ([k, sel, partial]: [string, string | undefined, string]) => {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+        // Also update the focused input so text appears in the field
+        const el = sel ? document.querySelector(sel) : document.activeElement;
+        if (el && "value" in el) (el as HTMLInputElement).value = partial;
+      },
+      [text[i], inputSel, text.slice(0, i + 1)] as [string, string | undefined, string],
+    );
     await page.waitForTimeout(delay);
   }
 }
 async function pressKey(page: any, key: string, modifiers: Record<string, boolean> = {}) {
   for (const mod of Object.keys(modifiers)) {
-    if (modifiers[mod]) await page.evaluate((k: string) => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })), mod);
+    if (modifiers[mod])
+      await page.evaluate(
+        (k: string) =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })),
+        mod,
+      );
   }
   await page.waitForTimeout(100);
-  await page.evaluate(([k, m]: [string, Record<string, boolean>]) => {
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: k, ...m, bubbles: true }));
-  }, [key, Object.fromEntries(Object.entries(modifiers).map(([k, v]) => [k.replace("Control", "ctrl").replace("Shift", "shift").replace("Alt", "alt") + "Key", v]))] as [string, any]);
+  await page.evaluate(
+    ([k, m]: [string, Record<string, boolean>]) => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: k, ...m, bubbles: true }));
+    },
+    [
+      key,
+      Object.fromEntries(
+        Object.entries(modifiers).map(([k, v]) => [
+          k.replace("Control", "ctrl").replace("Shift", "shift").replace("Alt", "alt") + "Key",
+          v,
+        ]),
+      ),
+    ] as [string, any],
+  );
   await page.waitForTimeout(150);
   for (const mod of Object.keys(modifiers)) {
-    if (modifiers[mod]) await page.evaluate((k: string) => document.dispatchEvent(new KeyboardEvent("keyup", { key: k, bubbles: true })), mod);
+    if (modifiers[mod])
+      await page.evaluate(
+        (k: string) =>
+          document.dispatchEvent(new KeyboardEvent("keyup", { key: k, bubbles: true })),
+        mod,
+      );
   }
   await page.waitForTimeout(100);
 }
@@ -197,13 +246,22 @@ test("dashboard — full interaction demo", async ({ page }) => {
   await pressKey(page, "k", { Control: true });
   await page.waitForTimeout(200);
   await moveToEl(page, "#search");
-  await clickAt(page, (await page.evaluate(() => { const r = document.querySelector("#search")!.getBoundingClientRect(); return r.x + r.width / 2; })), 24);
+  await clickAt(
+    page,
+    await page.evaluate(() => {
+      const r = document.querySelector("#search")!.getBoundingClientRect();
+      return r.x + r.width / 2;
+    }),
+    24,
+  );
   await page.waitForTimeout(200);
   await typeKeys(page, "orders", 80, "#search");
   await page.waitForTimeout(400);
 
   // 4. Press Escape to clear
-  await page.evaluate(() => { (document.querySelector("#search") as HTMLInputElement).value = ""; });
+  await page.evaluate(() => {
+    (document.querySelector("#search") as HTMLInputElement).value = "";
+  });
   await pressKey(page, "Escape");
   await page.waitForTimeout(300);
 

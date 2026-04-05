@@ -34,13 +34,7 @@ export function getDomInjector() {
 function listenerMain() {
   if ((window as any).__qaHud) return;
 
-  const modifierKeys = new Set([
-    "Shift",
-    "Control",
-    "Alt",
-    "Meta",
-    "CapsLock",
-  ]);
+  const modifierKeys = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
 
   const state = {
     cx: -40,
@@ -73,25 +67,21 @@ function listenerMain() {
       state.cy = e.clientY;
       state.onCursorMove?.(e.clientX, e.clientY);
     },
-    true
+    true,
   );
-  document.addEventListener(
-    "mousedown",
-    (e) => state.onMouseDown?.(e.clientX, e.clientY),
-    true
-  );
+  document.addEventListener("mousedown", (e) => state.onMouseDown?.(e.clientX, e.clientY), true);
   document.addEventListener("mouseup", () => state.onMouseUp?.(), true);
   document.addEventListener(
     "keydown",
     (e) => state.onKeyDown?.(formatKey(e), modifierKeys.has(e.key)),
-    true
+    true,
   );
   document.addEventListener(
     "keyup",
     (e) => {
       if (modifierKeys.has(e.key)) state.onKeyUp?.(e.key);
     },
-    true
+    true,
   );
 }
 

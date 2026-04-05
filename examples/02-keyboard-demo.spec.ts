@@ -89,39 +89,91 @@ const HTML = `<!DOCTYPE html>
 let server: http.Server;
 let baseUrl: string;
 test.beforeAll(async () => {
-  server = http.createServer((_, res) => { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(HTML); });
+  server = http.createServer((_, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HTML);
+  });
   await new Promise<void>((r) => server.listen(0, r));
   baseUrl = `http://localhost:${(server.address() as any).port}`;
 });
 test.afterAll(() => server?.close());
 
 async function moveTo(page: any, x: number, y: number) {
-  const s = await page.evaluate(() => ({ x: (window as any).__qaHud?.cx ?? 0, y: (window as any).__qaHud?.cy ?? 0 }));
-  for (let i = 1; i <= 10; i++) { const t = i / 10; await page.evaluate(([mx, my]: [number, number]) => document.dispatchEvent(new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true })), [s.x + (x - s.x) * t, s.y + (y - s.y) * t] as [number, number]); await page.waitForTimeout(20); }
+  const s = await page.evaluate(() => ({
+    x: (window as any).__qaHud?.cx ?? 0,
+    y: (window as any).__qaHud?.cy ?? 0,
+  }));
+  for (let i = 1; i <= 10; i++) {
+    const t = i / 10;
+    await page.evaluate(
+      ([mx, my]: [number, number]) =>
+        document.dispatchEvent(
+          new MouseEvent("mousemove", { clientX: mx, clientY: my, bubbles: true }),
+        ),
+      [s.x + (x - s.x) * t, s.y + (y - s.y) * t] as [number, number],
+    );
+    await page.waitForTimeout(20);
+  }
 }
 async function moveToEl(page: any, sel: string) {
-  const c = await page.evaluate((s: string) => { const r = document.querySelector(s)!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, sel);
-  await moveTo(page, c.x, c.y); return c;
+  const c = await page.evaluate((s: string) => {
+    const r = document.querySelector(s)!.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, sel);
+  await moveTo(page, c.x, c.y);
+  return c;
 }
 async function clickEl(page: any, sel: string) {
-  const c = await moveToEl(page, sel); await page.waitForTimeout(150);
-  await page.evaluate(([x, y]: [number, number]) => { document.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true })); setTimeout(() => document.dispatchEvent(new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true })), 60); }, [c.x, c.y] as [number, number]);
+  const c = await moveToEl(page, sel);
+  await page.waitForTimeout(150);
+  await page.evaluate(
+    ([x, y]: [number, number]) => {
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true }),
+      );
+      setTimeout(
+        () =>
+          document.dispatchEvent(
+            new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true }),
+          ),
+        60,
+      );
+    },
+    [c.x, c.y] as [number, number],
+  );
   await page.evaluate((s: string) => (document.querySelector(s) as HTMLElement)?.click(), sel);
   await page.waitForTimeout(100);
 }
 async function typeKeys(page: any, text: string, delay = 70) {
-  for (const ch of text) { await page.evaluate((k: string) => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })), ch); await page.waitForTimeout(delay); }
+  for (const ch of text) {
+    await page.evaluate(
+      (k: string) =>
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })),
+      ch,
+    );
+    await page.waitForTimeout(delay);
+  }
 }
 async function modKey(page: any, mod: string, key: string) {
-  await page.evaluate((m: string) => document.dispatchEvent(new KeyboardEvent("keydown", { key: m, bubbles: true })), mod);
+  await page.evaluate(
+    (m: string) => document.dispatchEvent(new KeyboardEvent("keydown", { key: m, bubbles: true })),
+    mod,
+  );
   await page.waitForTimeout(120);
   const mods: Record<string, boolean> = {};
   if (mod === "Control") mods.ctrlKey = true;
   if (mod === "Shift") mods.shiftKey = true;
   if (mod === "Alt") mods.altKey = true;
-  await page.evaluate(([k, m]: [string, any]) => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, ...m, bubbles: true })), [key, mods] as [string, any]);
+  await page.evaluate(
+    ([k, m]: [string, any]) =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: k, ...m, bubbles: true })),
+    [key, mods] as [string, any],
+  );
   await page.waitForTimeout(200);
-  await page.evaluate((m: string) => document.dispatchEvent(new KeyboardEvent("keyup", { key: m, bubbles: true })), mod);
+  await page.evaluate(
+    (m: string) => document.dispatchEvent(new KeyboardEvent("keyup", { key: m, bubbles: true })),
+    mod,
+  );
   await page.waitForTimeout(150);
 }
 
@@ -138,33 +190,54 @@ test("code editor — typing, shortcuts, tab switching", async ({ page }) => {
     return { x: r.x + 60, y: r.y + r.height + 12 };
   });
   await moveTo(page, lastLine.x, lastLine.y);
-  await page.evaluate(([x, y]: [number, number]) => {
-    document.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true }));
-    setTimeout(() => document.dispatchEvent(new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true })), 60);
-  }, [lastLine.x, lastLine.y] as [number, number]);
+  await page.evaluate(
+    ([x, y]: [number, number]) => {
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: x, clientY: y, bubbles: true }),
+      );
+      setTimeout(
+        () =>
+          document.dispatchEvent(
+            new MouseEvent("mouseup", { clientX: x, clientY: y, bubbles: true }),
+          ),
+        60,
+      );
+    },
+    [lastLine.x, lastLine.y] as [number, number],
+  );
   await page.waitForTimeout(300);
 
   // 2. Type new code
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+  );
   await page.waitForTimeout(200);
   await typeKeys(page, "// New test added", 60);
   await page.waitForTimeout(300);
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+  );
   await page.waitForTimeout(200);
   await typeKeys(page, 'test("new", async () => {', 55);
   await page.waitForTimeout(200);
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+  );
   await page.waitForTimeout(150);
   await typeKeys(page, "  expect(true).toBe(true);", 50);
   await page.waitForTimeout(200);
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+  );
   await page.waitForTimeout(150);
   await typeKeys(page, "});", 70);
   await page.waitForTimeout(400);
 
   // 3. Ctrl+S — save
   await modKey(page, "Control", "s");
-  await page.evaluate(() => { document.getElementById("saved-indicator")!.classList.add("show"); });
+  await page.evaluate(() => {
+    document.getElementById("saved-indicator")!.classList.add("show");
+  });
   await page.waitForTimeout(500);
 
   // 4. Ctrl+A — select all
@@ -193,27 +266,41 @@ test("code editor — typing, shortcuts, tab switching", async ({ page }) => {
 
   // 10. Arrow key navigation
   for (let i = 0; i < 4; i++) {
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+    );
     await page.waitForTimeout(120);
   }
   for (let i = 0; i < 2; i++) {
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })),
+    );
     await page.waitForTimeout(120);
   }
   await page.waitForTimeout(300);
 
   // 11. Shift+ArrowDown — select lines
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true })),
+  );
   await page.waitForTimeout(100);
   for (let i = 0; i < 3; i++) {
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }),
+      ),
+    );
     await page.waitForTimeout(150);
   }
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true })),
+  );
   await page.waitForTimeout(300);
 
   // 12. Escape
-  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  await page.evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
   await page.waitForTimeout(500);
 
   expect(await page.evaluate(() => !!document.querySelector("[data-qa-hud]"))).toBe(true);
