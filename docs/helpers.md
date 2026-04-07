@@ -26,15 +26,20 @@ await moveTo(page, 400, 300);
 
 ### `moveToEl(page, selector)`
 
-Animate the HUD cursor to the center of the element matching `selector`. Returns `{ x, y }` coordinates (always, even when HUD inactive — useful for subsequent clicks).
+Animate the HUD cursor to the center of the element matching `selector`. Returns `{ x, y }` for a matched element, or `null` if the selector doesn't match (no throw). When HUD is inactive, resolves coordinates but skips the animation.
 
 ```ts
-const center = await moveToEl(page, "#submit-btn");
+const pos = await moveToEl(page, "#submit-btn");
+if (pos) {
+  // safe to use pos.x / pos.y
+} else {
+  // selector did not match — handle gracefully
+}
 ```
 
 ### `clickEl(page, selector)`
 
-Animated click: moves cursor to element → shows ripple → performs DOM `.click()`. When HUD is inactive, just performs the DOM click without animation/delays.
+Animated click: moves cursor to element → shows ripple → performs DOM `.click()`. When HUD is inactive, just performs the DOM click without animation/delays. When the selector doesn't match any element, `clickEl` is a safe no-op (no throw).
 
 ```ts
 await clickEl(page, "#submit-btn");
@@ -57,8 +62,8 @@ await typeKeys(page, "hello@example.com", 55, "#email");
 |--------|-----------|-------------|
 | hudWait | Waits ms | Instant (no-op) |
 | moveTo | Animates cursor | No-op |
-| moveToEl | Animates cursor, returns coords | Returns coords only |
-| clickEl | Animate → ripple → click → wait | DOM click only |
+| moveToEl | Animates cursor, returns coords (or `null` if missing) | Returns coords only (or `null` if missing) |
+| clickEl | Animate → ripple → click → wait (no-op if missing) | DOM click only (no-op if missing) |
 | typeKeys | Char-by-char with key badges | Sets value directly |
 
 ## Tips
