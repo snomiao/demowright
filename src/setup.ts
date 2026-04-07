@@ -76,16 +76,17 @@ export async function applyHud(
   const domInjector = getDomInjector();
 
   const videoPaths: string[] = [];
+  const pageNames: string[] = [];
 
   async function setupPage(page: Page) {
     registerHudPage(page, { tts: opts.tts });
-    wrapNavigation(page, domInjector, hudOpts);
+    wrapNavigation(page, domInjector, hudOpts, pageNames);
     if (opts.actionDelay > 0) {
       patchPageDelay(page, opts.actionDelay);
     }
+
     if (audioWriter) {
       await setupAudioCapture(page, audioWriter);
-      // Eagerly resolve video path while page is alive
       try {
         const vp = await page.video()?.path();
         if (vp) videoPaths.push(vp);
@@ -138,9 +139,9 @@ export async function applyHud(
         return;
       }
 
-      // MP4 goes to output root (.demowright/), not the tmp subdir
-      const mp4Name = audioPath.split("/").pop()!.replace(/\.wav$/, ".mp4");
-      const mp4Path = join(outDir, mp4Name);
+      // Name MP4 from the first page URL, or fallback to timestamp
+      const baseName = pageNames[0] ?? `demowright-${Date.now()}`;
+      const mp4Path = join(outDir, `${baseName}.mp4`);
       const trimSec = (audioOffsetMs / 1000).toFixed(3);
       let muxed = false;
       for (const videoPath of videoPaths) {
@@ -170,10 +171,9 @@ export async function applyHud(
 /**
  * Wraps page navigation methods to inject HUD DOM after each navigation.
  */
-function wrapNavigation(page: Page, domInjector: (opts: HudOptions) => void, hudOpts: HudOptions) {
+function wrapNavigation(page: Page, domInjector: (opts: HudOptions) => void, hudOpts: HudOptions, pageNames?: string[]) {
   async function injectDom() {
     try {
-      // Check if page is still usable before injecting
       if (page.isClosed()) return;
       await page.evaluate(domInjector, hudOpts);
     } catch {
@@ -181,11 +181,31 @@ function wrapNavigation(page: Page, domInjector: (opts: HudOptions) => void, hud
     }
   }
 
+  async function captureTitle() {
+    if (!pageNames) return;
+    try {
+      if (page.isClosed()) return;
+      let title = await page.title();
+      if (!title) {
+        // Fallback: first h1 or prominent heading text
+        title = await page.evaluate(() => {
+          const el = document.querySelector("h1, .brand, [class*='logo'], header h2");
+          return el?.textContent?.trim() ?? "";
+        });
+      }
+      if (title) {
+        const clean = title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 60);
+        if (clean && !clean.startsWith("loading")) pageNames.push(clean);
+      }
+    } catch {}
+  }
+
   // Wrap goto
   const originalGoto = page.goto.bind(page);
   (page as any).goto = async function (...args: any[]) {
     const result = await originalGoto(...(args as [any, ...any[]]));
     await injectDom();
+    await captureTitle();
     return result;
   };
 
@@ -442,3 +462,5 @@ function finalizeRenderJob(
     }
   }
 }
+
+
