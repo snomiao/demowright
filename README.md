@@ -1,4 +1,4 @@
-# qa-hud
+# demowright
 
 Playwright HUD plugin — renders a visible **mouse cursor**, **keystroke display**, **auto-slowdown**, **TTS narration**, and **subtitles** into test video recordings, making them readable by humans and AI (e.g. Gemini video analysis).
 
@@ -25,7 +25,7 @@ Playwright's video recording doesn't capture the browser cursor or keyboard inpu
 
 ## Solution
 
-`qa-hud` injects a lightweight overlay into every page during test execution:
+`demowright` injects a lightweight overlay into every page during test execution:
 
 - 🖱️ **Visible cursor** — SVG pointer follows mouse with click ripple effects
 - ⌨️ **Keystroke display** — keys shown as HUD badges; modifier keys (Shift/Ctrl/Alt) as persistent blue badges
@@ -38,7 +38,7 @@ Playwright's video recording doesn't capture the browser cursor or keyboard inpu
 ## Quick Start
 
 ```bash
-npm install qa-hud
+npm install demowright
 ```
 
 ### Zero-change setup (recommended) ⭐
@@ -48,9 +48,9 @@ Add one line to your `playwright.config.ts` — no test files need to change:
 ```ts
 // playwright.config.ts
 import { defineConfig } from "@playwright/test";
-import { withQaHud } from "qa-hud/config";
+import { withDemowright } from "demowright/config";
 
-export default withQaHud(
+export default withDemowright(
   defineConfig({
     use: { video: "on" },
   }),
@@ -62,7 +62,7 @@ Your existing tests keep using `import { test } from '@playwright/test'` — the
 ### Alternative: CLI flag (zero code changes at all)
 
 ```bash
-NODE_OPTIONS="--require qa-hud/register" npx playwright test
+NODE_OPTIONS="--require demowright/register" npx playwright test
 ```
 
 ### Alternative: Import replacement
@@ -71,14 +71,14 @@ NODE_OPTIONS="--require qa-hud/register" npx playwright test
 // Change this:
 import { test, expect } from "@playwright/test";
 // To this:
-import { test, expect } from "qa-hud";
+import { test, expect } from "demowright";
 ```
 
 ### Alternative: Programmatic (full control)
 
 ```ts
 import { test as base } from "@playwright/test";
-import { applyHud } from "qa-hud";
+import { applyHud } from "demowright";
 
 const test = base.extend({
   context: async ({ context }, use) => {
@@ -91,8 +91,8 @@ const test = base.extend({
 ## Configuration
 
 ```ts
-// Via withQaHud (recommended)
-export default withQaHud(defineConfig({ ... }), {
+// Via withDemowright (recommended)
+export default withDemowright(defineConfig({ ... }), {
   actionDelay: 200,
   cursorStyle: 'dot',
 });
@@ -111,7 +111,7 @@ test.use({
 });
 
 // Via env vars (CLI approach)
-QA_HUD_CURSOR=0 QA_HUD_DELAY=200 NODE_OPTIONS="--require qa-hud/register" npx playwright test
+QA_HUD_CURSOR=0 QA_HUD_DELAY=200 NODE_OPTIONS="--require demowright/register" npx playwright test
 ```
 
 | Env Var                   | Description               | Default   |
@@ -127,7 +127,7 @@ QA_HUD_CURSOR=0 QA_HUD_DELAY=200 NODE_OPTIONS="--require qa-hud/register" npx pl
 ## Helpers — Recording-Only Convenience Functions
 
 ```ts
-import { clickEl, typeKeys, narrate, annotate, hudWait } from "qa-hud/helpers";
+import { clickEl, typeKeys, narrate, annotate, hudWait } from "demowright/helpers";
 
 await annotate(page, "Welcome to the product tour"); // subtitle + TTS
 await clickEl(page, "#get-started");                  // animated cursor + ripple + click
@@ -143,7 +143,7 @@ All helpers are **no-ops when HUD is inactive** — safe to leave in production 
 Configure a TTS provider for spoken narration in recordings:
 
 ```ts
-export default withQaHud(defineConfig({ ... }), {
+export default withDemowright(defineConfig({ ... }), {
   tts: "http://localhost:5000/tts?text=%s", // URL template
   audio: "test-audio.wav",                   // capture audio to WAV
 });

@@ -1,13 +1,13 @@
 # Text-to-Speech (TTS) Narration
 
-qa-hud can narrate your test recordings with spoken audio via `narrate()` and `annotate()`.
+demowright can narrate your test recordings with spoken audio via `narrate()` and `annotate()`.
 There are two ways to get TTS working:
 
 ---
 
 ## Option 1: Custom TTS Provider (recommended)
 
-Pass a `tts` option to `applyHud()` or `withQaHud()`. The provider runs **Node-side**, fetches audio, and plays it in the browser via `AudioContext` — captured by the Web Audio tap when `audio` is enabled.
+Pass a `tts` option to `applyHud()` or `withDemowright()`. The provider runs **Node-side**, fetches audio, and plays it in the browser via `AudioContext` — captured by the Web Audio tap when `audio` is enabled.
 
 ### URL Template
 
@@ -16,9 +16,9 @@ Use `%s` as a placeholder for `encodeURIComponent(text)`.
 
 ```ts
 // playwright.config.ts
-import { withQaHud } from 'qa-hud/config';
+import { withDemowright } from 'demowright/config';
 
-export default withQaHud(defineConfig({ ... }), {
+export default withDemowright(defineConfig({ ... }), {
   tts: "https://api.example.com/tts?text=%s&voice=en-US",
   audio: "test-audio.wav",
 });
@@ -39,7 +39,7 @@ export default withQaHud(defineConfig({ ... }), {
 For APIs that require auth headers, POST bodies, or custom logic:
 
 ```ts
-import { applyHud } from 'qa-hud';
+import { applyHud } from 'demowright';
 
 await applyHud(context, {
   audio: "recording.wav",
@@ -79,7 +79,7 @@ await applyHud(context, {
 
 ### Environment Variable
 
-When using the config approach (`withQaHud`), URL templates are forwarded via `QA_HUD_TTS`:
+When using the config approach (`withDemowright`), URL templates are forwarded via `QA_HUD_TTS`:
 
 ```bash
 QA_HUD_TTS="http://localhost:5000/tts?text=%s" npx playwright test
@@ -151,9 +151,9 @@ narrate("Hello world")
 
 ```ts
 import { defineConfig } from "@playwright/test";
-import { withQaHud } from "qa-hud/config";
+import { withDemowright } from "demowright/config";
 
-export default withQaHud(
+export default withDemowright(
   defineConfig({
     use: {
       video: "on",
@@ -172,7 +172,7 @@ export default withQaHud(
 Then in your test:
 
 ```ts
-import { narrate, annotate, clickEl } from "qa-hud/helpers";
+import { narrate, annotate, clickEl } from "demowright/helpers";
 
 test("demo", async ({ page }) => {
   await page.goto("https://example.com");

@@ -1,11 +1,11 @@
 {
-  "name": "qa-hud",
+  "name": "demowright",
   "version": "0.1.0",
-  "description": "Playwright HUD plugin — shows cursor, keystrokes, and auto-slowdown in test video recordings",
+  "description": "Playwright video production plugin — cursor overlay, keystroke badges, TTS narration, and narration-driven video scripts for test recordings",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/snomiao/qa-hud.git"
+    "url": "https://github.com/snomiao/demowright.git"
   },
   "files": [
     "dist",
@@ -13,32 +13,42 @@
     "media"
   ],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
     },
     "./register": "./register.cjs",
     "./config": {
-      "import": "./dist/config.js",
-      "types": "./dist/config.d.ts"
+      "import": "./dist/config.mjs",
+      "types": "./dist/config.d.mts"
+    },
+    "./helpers": {
+      "import": "./dist/helpers.mjs",
+      "types": "./dist/helpers.d.mts"
+    },
+    "./auto-annotate": {
+      "import": "./dist/auto-annotate.mjs",
+      "types": "./dist/auto-annotate.d.mts"
     }
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
-    "test": "npx playwright test",
-    "demo": "npx playwright test tests/demo.spec.ts --headed"
+    "build": "tsdown",
+    "test": "bunx playwright test",
+    "demo": "bunx playwright test tests/demo.spec.ts --headed",
+    "prepublishOnly": "tsdown"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/node": "^25.5.2",
+    "@typescript/native-preview": "^7.0.0-dev.20260405.1",
     "semantic-release": "^25.0.3",
-    "typescript": "^5.7.0"
+    "tsdown": "^0.21.7"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"

@@ -5,7 +5,8 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { moveTo, moveToEl, clickEl, typeKeys, hudWait, subtitle } from "../src/helpers.js";
+import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
+import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -123,86 +124,105 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("dashboard — full interaction demo", async ({ page }) => {
+  const plan = createVideoScript()
+    .segment(
+      "Welcome to the QA Dashboard. Let's start by navigating between the top-level tabs to explore analytics, reports, and the main overview.",
+      async (pace) => {
+        await clickEl(page, "#nav-analytics");
+        await pace();
+        await clickEl(page, "#nav-reports");
+        await pace();
+        await clickEl(page, "#nav-overview");
+        await pace();
+      },
+    )
+    .segment(
+      "Now let's review the dashboard metrics. We have revenue, active users, total orders, and conversion rate — each card shows the current value and trend.",
+      async (pace) => {
+        await moveToEl(page, "#s1");
+        await pace();
+        await moveToEl(page, "#s2");
+        await pace();
+        await moveToEl(page, "#s3");
+        await pace();
+        await moveToEl(page, "#s4");
+        await pace();
+      },
+    )
+    .segment(
+      "Let's use the keyboard shortcut Control-K to focus the search bar, then type orders to filter the results quickly.",
+      async (pace) => {
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", bubbles: true })),
+        );
+        await pace();
+        await page.evaluate(() =>
+          document.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
+          ),
+        );
+        await pace();
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true })),
+        );
+        await clickEl(page, "#search");
+        await pace();
+        await typeKeys(page, "orders", 80, "#search");
+        await pace();
+      },
+    )
+    .segment(
+      "Now we'll press Escape to clear the search field and return to the full dashboard view.",
+      async (pace) => {
+        await page.evaluate(() => {
+          (document.querySelector("#search") as HTMLInputElement).value = "";
+        });
+        await pace();
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+        );
+        await pace();
+      },
+    )
+    .segment(
+      "Let's scan through the recent orders table. Each row shows the order ID, customer name, amount, and current status.",
+      async (pace) => {
+        for (let i = 1; i <= 4; i++) {
+          await moveToEl(page, `table tbody tr:nth-child(${i}) td:nth-child(2)`);
+          await pace();
+        }
+      },
+    )
+    .segment(
+      "Time to create a new order. We'll click the New Order button to open the modal form, then fill in the customer name and amount before saving.",
+      async (pace) => {
+        await clickEl(page, "#add-btn");
+        await pace();
+        await clickEl(page, "#m-customer");
+        await page.evaluate(() => (document.querySelector("#m-customer") as HTMLInputElement).focus());
+        await typeKeys(page, "Eve Wilson", 70, "#m-customer");
+        await pace();
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+        );
+        await page.evaluate(() => (document.querySelector("#m-amount") as HTMLInputElement).focus());
+        await typeKeys(page, "199.99", 70, "#m-amount");
+        await pace();
+        await clickEl(page, "#m-save");
+        await pace();
+      },
+    );
+
   await page.goto(baseUrl);
-  await hudWait(page, 600);
 
-  // 1. Browse nav tabs
-  await subtitle(page, "Navigating between tabs");
-  await clickEl(page, "#nav-analytics");
-  await hudWait(page, 300);
-  await clickEl(page, "#nav-reports");
-  await hudWait(page, 300);
-  await clickEl(page, "#nav-overview");
-  await hudWait(page, 400);
+  const result = await plan.run(page);
 
-  // 2. Hover stat cards
-  await subtitle(page, "Reviewing dashboard metrics");
-  for (const id of ["#s1", "#s2", "#s3", "#s4"]) {
-    await moveToEl(page, id);
-    await hudWait(page, 250);
+  for (const entry of result.timeline) {
+    console.log(
+      `  [${entry.startMs.toFixed(0).padStart(6)}ms] "${entry.text.slice(0, 50)}…" — ${entry.durationMs.toFixed(0)}ms`,
+    );
   }
-  await hudWait(page, 200);
-
-  // 3. Ctrl+K to focus search
-  await subtitle(page, "Using keyboard shortcut Ctrl+K");
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", bubbles: true })),
-  );
-  await hudWait(page, 100);
-  await page.evaluate(() =>
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
-    ),
-  );
-  await hudWait(page, 150);
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true })),
-  );
-  await hudWait(page, 100);
-  await clickEl(page, "#search");
-  await hudWait(page, 200);
-  await typeKeys(page, "orders", 80, "#search");
-  await hudWait(page, 400);
-
-  // 4. Press Escape to clear
-  await page.evaluate(() => {
-    (document.querySelector("#search") as HTMLInputElement).value = "";
-  });
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
-  );
-  await hudWait(page, 300);
-
-  // 5. Hover table rows
-  for (let i = 1; i <= 4; i++) {
-    await moveToEl(page, `table tbody tr:nth-child(${i}) td:nth-child(2)`);
-    await hudWait(page, 200);
-  }
-
-  // 6. Click "+ New Order" button
-  await clickEl(page, "#add-btn");
-  await hudWait(page, 500);
-
-  // 7. Fill the modal form
-  await subtitle(page, "Creating a new order");
-  await clickEl(page, "#m-customer");
-  await page.evaluate(() => (document.querySelector("#m-customer") as HTMLInputElement).focus());
-  await hudWait(page, 150);
-  await typeKeys(page, "Eve Wilson", 70, "#m-customer");
-  await hudWait(page, 200);
-
-  // Tab to next field
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
-  );
-  await page.evaluate(() => (document.querySelector("#m-amount") as HTMLInputElement).focus());
-  await hudWait(page, 200);
-  await typeKeys(page, "199.99", 70, "#m-amount");
-  await hudWait(page, 300);
-
-  // 8. Click Save
-  await clickEl(page, "#m-save");
-  await hudWait(page, 600);
+  console.log(`  Total: ${result.totalMs.toFixed(0)}ms`);
 
   expect(await page.evaluate(() => !!document.querySelector("[data-qa-hud]"))).toBe(true);
 });

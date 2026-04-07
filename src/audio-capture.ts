@@ -4,6 +4,7 @@
  * Injected via addInitScript. Monkey-patches AudioContext so that all audio
  * routed to ctx.destination gets tapped by a ScriptProcessorNode.
  * PCM float32 chunks are sent to Node via page.exposeFunction('__qaHudAudioChunk').
+ * Part of the demowright video overlay toolkit.
  */
 
 export function generateAudioCaptureScript(): string {
@@ -34,9 +35,7 @@ function audioCaptureMain() {
 
     processor.onaudioprocess = (e: AudioProcessingEvent) => {
       const left = e.inputBuffer.getChannelData(0);
-      const right = e.inputBuffer.numberOfChannels > 1
-        ? e.inputBuffer.getChannelData(1)
-        : left;
+      const right = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : left;
 
       // Pass through audio
       e.outputBuffer.getChannelData(0).set(left);
@@ -76,10 +75,7 @@ function audioCaptureMain() {
     return origConnect.call(this, dest, output, input);
   };
 
-  (AudioNode.prototype as any).disconnect = function (
-    this: AudioNode,
-    dest?: any,
-  ) {
+  (AudioNode.prototype as any).disconnect = function (this: AudioNode, dest?: any) {
     if (dest instanceof AudioDestinationNode) {
       const gain = interceptors.get(dest);
       if (gain) return origDisconnect.call(this, gain);

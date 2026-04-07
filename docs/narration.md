@@ -1,12 +1,12 @@
 # Narration & Subtitles
 
-qa-hud can add spoken narration and visual subtitles to your test recordings — perfect for stakeholder demos, onboarding videos, and bug reports.
+demowright can add spoken narration and visual subtitles to your test recordings — perfect for stakeholder demos, onboarding videos, and bug reports.
 
 ## Import
 ```ts
-import { narrate, subtitle, annotate } from "qa-hud/helpers";
+import { narrate, subtitle, annotate } from "demowright/helpers";
 // or
-import { narrate, subtitle, annotate } from "qa-hud";
+import { narrate, subtitle, annotate } from "demowright";
 ```
 
 ## Functions
@@ -45,7 +45,7 @@ await annotate(page, "Let's check the pricing", { durationMs: 5000, rate: 1.1 })
 ## TTS Provider Setup
 Brief mention that TTS requires configuration for headless. Link to [TTS Setup](./tts.md) for details:
 ```ts
-export default withQaHud(defineConfig({...}), {
+export default withDemowright(defineConfig({...}), {
   tts: "http://localhost:5000/tts?text=%s",
 });
 ```

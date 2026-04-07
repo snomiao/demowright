@@ -1,12 +1,12 @@
 /**
- * Example 6: Native Playwright API — zero qa-hud helpers
+ * Example 6: Native Playwright API — zero demowright helpers
  *
- * This demo proves that qa-hud works with ZERO custom helpers.
+ * This demo proves that demowright works with ZERO custom helpers.
  * Only native Playwright methods are used: page.click(), page.fill(),
  * page.selectOption(), page.check(), page.press().
  *
  * The HUD overlay (cursor trail, key badges, click ripples) still appears
- * because `withQaHud` in the config injects an `addInitScript` listener
+ * because `withDemowright` in the config injects an `addInitScript` listener
  * and DOM injector automatically. The `patchPageDelay` wrapper adds a small
  * delay after every native action so the video recording stays watchable.
  *

@@ -1,17 +1,17 @@
 /**
- * qa-hud — Playwright HUD plugin
+ * demowright — Playwright video production plugin
  *
  * Overlays a visible cursor, keystroke badges, click ripples, auto-slowdown,
  * TTS narration, and subtitles into test video recordings.
  *
  * ## Quick Start
  *
- *   import { withQaHud } from "qa-hud/config";
- *   export default withQaHud(defineConfig({ use: { video: "on" } }));
+ *   import { withDemowright } from "demowright/config";
+ *   export default withDemowright(defineConfig({ use: { video: "on" } }));
  *
  * ## Helpers (recording-only, no-ops when HUD inactive)
  *
- *   import { clickEl, typeKeys, narrate, annotate, hudWait } from "qa-hud";
+ *   import { clickEl, typeKeys, narrate, annotate, hudWait } from "demowright";
  *
  * ## Documentation
  *
@@ -28,11 +28,11 @@
  */
 
 // Approach 1: Import replacement
-//   import { test, expect } from 'qa-hud';
+//   import { test, expect } from 'demowright';
 export { test } from "./fixture.js";
 
 // Approach 4: Programmatic — call applyHud() on any BrowserContext
-//   import { applyHud } from 'qa-hud';
+//   import { applyHud } from 'demowright';
 export { applyHud } from "./setup.js";
 
 export type { QaHudOptions, TtsProvider } from "./setup.js";
@@ -46,8 +46,17 @@ export {
   clickEl,
   typeKeys,
   narrate,
+  caption,
   subtitle,
   annotate,
 } from "./helpers.js";
+
+// Auto-annotation hook for config/register integrations
+export { installAutoAnnotate } from "./auto-annotate.js";
+
+// Video script — narration-driven video production (title cards, segments, transitions, SRT, chapters)
+export { createVideoScript, buildFfmpegCommand } from "./video-script.js";
+export type { VideoScriptResult, TimelineEntry, PaceFn, TitleOptions, OutroOptions, RenderOptions } from "./video-script.js";
+export { getGlobalTtsProvider } from "./hud-registry.js";
 
 export { expect } from "@playwright/test";

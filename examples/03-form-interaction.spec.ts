@@ -5,7 +5,8 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { moveToEl, clickEl, typeKeys, hudWait, annotate } from "../src/helpers.js";
+import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
+import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -115,83 +116,97 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("e-commerce checkout — browse, add to cart, pay", async ({ page }) => {
+  const plan = createVideoScript()
+    .segment(
+      "Welcome to ShopHUD, an online store demo. Let's browse the product catalog and hover over each item to see the details.",
+      async (pace) => {
+        await moveToEl(page, ".product:nth-child(1)");
+        await pace();
+        await moveToEl(page, ".product:nth-child(2)");
+        await pace();
+        await moveToEl(page, ".product:nth-child(3)");
+        await pace();
+      },
+    )
+    .segment(
+      "Now we'll add the wireless headphones and the smart watch to our shopping cart by clicking the Add to Cart buttons.",
+      async (pace) => {
+        await clickEl(page, ".product:nth-child(1) .add-btn");
+        await pace();
+        await clickEl(page, ".product:nth-child(2) .add-btn");
+        await pace();
+      },
+    )
+    .segment(
+      "Great, two items added. Let's open the cart and proceed to the checkout form.",
+      async (pace) => {
+        await clickEl(page, "#cart-btn");
+        await pace();
+      },
+    )
+    .segment(
+      "Time to fill in the checkout form. We'll type the customer name, then tab through each field entering the email address, credit card number, expiry date, and security code.",
+      async (pace) => {
+        await clickEl(page, "#f-name");
+        await pace();
+        await typeKeys(page, "Jane Doe", 65, "#f-name");
+        await pace();
+
+        // Tab to email
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+        );
+        await page.evaluate(() => (document.querySelector("#f-email") as HTMLInputElement).focus());
+        await moveToEl(page, "#f-email");
+        await pace();
+        await typeKeys(page, "jane@example.com", 55, "#f-email");
+        await pace();
+
+        // Tab to card number
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+        );
+        await page.evaluate(() => (document.querySelector("#f-card") as HTMLInputElement).focus());
+        await moveToEl(page, "#f-card");
+        await pace();
+        await typeKeys(page, "4242 4242 4242 4242", 50, "#f-card");
+        await pace();
+
+        // Tab to expiry
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+        );
+        await page.evaluate(() => (document.querySelector("#f-exp") as HTMLInputElement).focus());
+        await typeKeys(page, "12/28", 70, "#f-exp");
+        await pace();
+
+        // Tab to CVC
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+        );
+        await page.evaluate(() => (document.querySelector("#f-cvc") as HTMLInputElement).focus());
+        await typeKeys(page, "456", 80, "#f-cvc");
+        await pace();
+      },
+    )
+    .segment(
+      "Everything looks good. Let's click Pay Now to complete the purchase and confirm the order.",
+      async (pace) => {
+        await clickEl(page, "#pay-btn");
+        await pace();
+      },
+    );
+
   await page.goto(baseUrl);
-  await hudWait(page, 600);
 
-  // 1. Hover products
-  await annotate(page, "Browsing the product catalog");
-  await moveToEl(page, ".product:nth-child(1)");
-  await hudWait(page, 300);
-  await moveToEl(page, ".product:nth-child(2)");
-  await hudWait(page, 300);
-  await moveToEl(page, ".product:nth-child(3)");
-  await hudWait(page, 300);
+  const result = await plan.run(page);
 
-  // 2. Add headphones to cart
-  await annotate(page, "Adding items to the shopping cart");
-  await clickEl(page, ".product:nth-child(1) .add-btn");
-  await hudWait(page, 400);
-
-  // 3. Add smart watch
-  await clickEl(page, ".product:nth-child(2) .add-btn");
-  await hudWait(page, 400);
-
-  // 4. Open cart / checkout
-  await annotate(page, "Opening the checkout form");
-  await clickEl(page, "#cart-btn");
-  await hudWait(page, 500);
-
-  // 5. Fill checkout form
-  await annotate(page, "Filling in customer details");
-  await clickEl(page, "#f-name");
-  await hudWait(page, 150);
-  await typeKeys(page, "Jane Doe", 65, "#f-name");
-  await hudWait(page, 200);
-
-  // Tab to email
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
-  );
-  await page.evaluate(() => (document.querySelector("#f-email") as HTMLInputElement).focus());
-  await hudWait(page, 200);
-  await moveToEl(page, "#f-email");
-  await hudWait(page, 100);
-  await typeKeys(page, "jane@example.com", 55, "#f-email");
-  await hudWait(page, 200);
-
-  // Tab to card number
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
-  );
-  await page.evaluate(() => (document.querySelector("#f-card") as HTMLInputElement).focus());
-  await hudWait(page, 200);
-  await moveToEl(page, "#f-card");
-  await hudWait(page, 100);
-  await typeKeys(page, "4242 4242 4242 4242", 50, "#f-card");
-  await hudWait(page, 200);
-
-  // Tab to expiry
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
-  );
-  await page.evaluate(() => (document.querySelector("#f-exp") as HTMLInputElement).focus());
-  await hudWait(page, 150);
-  await typeKeys(page, "12/28", 70, "#f-exp");
-  await hudWait(page, 150);
-
-  // Tab to CVC
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
-  );
-  await page.evaluate(() => (document.querySelector("#f-cvc") as HTMLInputElement).focus());
-  await hudWait(page, 150);
-  await typeKeys(page, "456", 80, "#f-cvc");
-  await hudWait(page, 300);
-
-  // 6. Click Pay Now
-  await annotate(page, "Completing the payment");
-  await clickEl(page, "#pay-btn");
-  await hudWait(page, 800);
+  for (const entry of result.timeline) {
+    console.log(
+      `  [${entry.startMs.toFixed(0).padStart(6)}ms] "${entry.text.slice(0, 50)}…" — ${entry.durationMs.toFixed(0)}ms`,
+    );
+  }
+  console.log(`  Total: ${result.totalMs.toFixed(0)}ms`);
 
   // Verify success
   const success = await page.evaluate(() => document.getElementById("success-msg")?.style.display);

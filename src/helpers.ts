@@ -1,20 +1,20 @@
 /**
- * Convenience helpers for QA HUD recordings.
+ * Convenience helpers for demowright recordings.
  *
- * All functions are no-ops (or fast pass-throughs) when qa-hud is not active
+ * All functions are no-ops (or fast pass-throughs) when demowright is not active
  * on the page, so tests remain fast in normal CI runs.
  *
- *   import { narrate, clickEl, typeKeys, hudWait } from 'qa-hud/helpers';
+ *   import { narrate, clickEl, typeKeys, caption, hudWait } from 'demowright/helpers';
  */
 import type { Page } from "@playwright/test";
-import { isHudActive, getTtsProvider } from "./hud-registry.js";
+import { isHudActive, getTtsProvider, storeAudioSegment } from "./hud-registry.js";
 
 // ---------------------------------------------------------------------------
 // hudWait — delay that only runs when HUD is active
 // ---------------------------------------------------------------------------
 
 /**
- * Wait for `ms` milliseconds, but only when QA HUD is active.
+ * Wait for `ms` milliseconds, but only when demowright is active.
  * Use this instead of `page.waitForTimeout()` for recording-only pauses.
  */
 export async function hudWait(page: Page, ms: number): Promise<void> {
@@ -125,7 +125,6 @@ export async function typeKeys(
   inputSelector?: string,
 ): Promise<void> {
   if (!(await isHudActive(page))) {
-    // Fast path — just set the value
     await page.evaluate(
       ([t, sel]: [string, string | undefined]) => {
         const el = sel
@@ -158,81 +157,107 @@ export async function typeKeys(
 }
 
 // ---------------------------------------------------------------------------
-// TTS Narration
+// TTS internals
 // ---------------------------------------------------------------------------
 
-/**
- * Fetch audio from a TTS provider (Node-side), base64-encode it,
- * send to the browser, and play via AudioContext so it gets captured
- * by the Web Audio tap.
- */
-async function narrateViaProvider(
-  page: Page,
-  text: string,
-  provider: string | ((text: string) => Promise<Buffer | ArrayBuffer>),
-): Promise<void> {
-  let audioBuf: ArrayBuffer;
+type TtsProviderType = string | ((text: string) => Promise<Buffer | ArrayBuffer>);
+
+/** Fetch audio from a TTS provider. Returns a WAV Buffer. */
+async function fetchTtsAudio(text: string, provider: TtsProviderType): Promise<Buffer> {
   if (typeof provider === "string") {
     const url = provider.replace(/%s/g, encodeURIComponent(text));
     const res = await fetch(url);
-    if (!res.ok) return;
-    audioBuf = await res.arrayBuffer();
-  } else {
-    const result = await provider(text);
-    audioBuf = result instanceof ArrayBuffer ? result : (result.buffer as ArrayBuffer).slice(result.byteOffset, result.byteOffset + result.byteLength);
+    if (!res.ok) throw new Error(`TTS fetch ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
   }
-  const b64 = Buffer.from(audioBuf).toString("base64");
-
-  await page.evaluate(async (data: string) => {
-    try {
-      const binary = atob(data);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const ctx = new AudioContext();
-      const decoded = await ctx.decodeAudioData(bytes.buffer);
-      const source = ctx.createBufferSource();
-      source.buffer = decoded;
-      source.connect(ctx.destination); // captured by our Web Audio tap
-      source.start();
-      await new Promise<void>((resolve) => {
-        source.onended = () => resolve();
-        setTimeout(resolve, (decoded.duration + 0.5) * 1000);
-      });
-    } catch {
-      // decode or playback failed — skip silently
-    }
-  }, b64);
+  const result = await provider(text);
+  return Buffer.isBuffer(result) ? result : Buffer.from(result);
 }
+
+/** Parse WAV and return { float32, sampleRate, channels, durationMs }. */
+function parseWav(wavBuf: Buffer) {
+  const dataOffset = wavBuf.indexOf("data") + 8;
+  if (dataOffset < 8) throw new Error("Invalid WAV");
+  const sampleRate = wavBuf.readUInt32LE(24);
+  const channels = wavBuf.readUInt16LE(22);
+  const pcmData = wavBuf.subarray(dataOffset);
+  const sampleCount = pcmData.length / 2; // 16-bit
+  const float32 = new Float32Array(sampleCount);
+  for (let i = 0; i < sampleCount; i++) {
+    float32[i] = pcmData.readInt16LE(i * 2) / 32768;
+  }
+  const durationMs = (sampleCount / channels / sampleRate) * 1000;
+  return { float32, sampleRate, channels, sampleCount, durationMs };
+}
+
+/**
+ * Store TTS audio segment with its timestamp for deferred track building.
+ * The complete audio track is assembled at context close using actual
+ * wall-clock timestamps, eliminating drift from page.evaluate overhead.
+ */
+async function playTtsAudio(page: Page, wavBuf: Buffer): Promise<void> {
+  const { durationMs } = parseWav(wavBuf);
+
+  // Store segment with wall-clock timestamp — track is built at context close
+  storeAudioSegment(page, { timestampMs: Date.now(), wavBuf });
+
+  // Wait for the narration duration so actions don't outpace the voice
+  await page.waitForTimeout(durationMs);
+}
+
+// ---------------------------------------------------------------------------
+// narrate — TTS narration with optional callback
+// ---------------------------------------------------------------------------
 
 /**
  * Speak `text` via the configured TTS provider, or fall back to
  * the browser's speechSynthesis API.
  *
- * TTS provider is configured via the `tts` option in applyHud / withQaHud:
- * - URL template: `"https://api.example.com/tts?text=%s"` (returns audio)
- * - Function: `async (text) => Buffer`
- * - false: use speechSynthesis (may not work in headless browsers)
+ * When called with a callback, pre-fetches the TTS audio, then runs
+ * the callback actions in parallel with audio playback — waiting for
+ * whichever takes longer. This keeps narration and actions in sync.
  *
- * When HUD is inactive, this is a no-op.
+ * ```ts
+ * // TTS only
+ * await narrate(page, "Processing complete");
+ *
+ * // TTS + actions timed together
+ * await narrate(page, "Now let's fill the form", async () => {
+ *   await clickEl(page, "#name");
+ *   await typeKeys(page, "Alice");
+ * });
+ * ```
+ *
+ * When HUD is inactive, only the callback runs (instantly, no TTS).
  */
 export async function narrate(
   page: Page,
   text: string,
-  options?: {
-    rate?: number;
-    pitch?: number;
-    volume?: number;
-    voice?: string;
-    waitForEnd?: boolean;
-  },
+  callbackOrOptions?: (() => Promise<void>) | { rate?: number; pitch?: number; volume?: number; voice?: string },
+  callback?: () => Promise<void>,
 ): Promise<void> {
-  if (!(await isHudActive(page))) return;
+  // Parse overloaded args
+  const cb = typeof callbackOrOptions === "function" ? callbackOrOptions : callback;
+  const options = typeof callbackOrOptions === "object" ? callbackOrOptions : undefined;
+
+  if (!(await isHudActive(page))) {
+    await cb?.();
+    return;
+  }
 
   // Check for a configured TTS provider
   const provider = getTtsProvider(page);
   if (provider) {
     try {
-      await narrateViaProvider(page, text, provider);
+      // Pre-fetch TTS audio
+      const wavBuf = await fetchTtsAudio(text, provider);
+
+      if (cb) {
+        // Run audio playback + callback in parallel, wait for both
+        await Promise.all([playTtsAudio(page, wavBuf), cb()]);
+      } else {
+        await playTtsAudio(page, wavBuf);
+      }
       return;
     } catch {
       // Provider failed — fall through to speechSynthesis
@@ -247,50 +272,48 @@ export async function narrate(
     voice: options?.voice,
   };
 
-  await page.evaluate(
+  const speechPromise = page.evaluate(
     ([t, o]: [string, typeof opts]) => {
       return new Promise<void>((resolve) => {
         const synth = window.speechSynthesis;
         if (!synth) { resolve(); return; }
-
         try {
           const utter = new SpeechSynthesisUtterance(t);
           utter.rate = o.rate;
           utter.pitch = o.pitch;
           utter.volume = o.volume;
-
           if (o.voice) {
             const voices = synth.getVoices();
             const match = voices.find((v) => v.name === o.voice || v.lang === o.voice);
             if (match) utter.voice = match;
           }
-
           utter.onend = () => resolve();
           utter.onerror = () => resolve();
-
-          // Safety timeout — headless browsers may not fire onend
           const timeout = Math.min(5000, Math.max(1000, t.length * 80));
           setTimeout(resolve, timeout);
-
           synth.speak(utter);
-        } catch {
-          resolve();
-        }
+        } catch { resolve(); }
       });
     },
     [text, opts] as [string, typeof opts],
   );
+
+  if (cb) {
+    await Promise.all([speechPromise, cb()]);
+  } else {
+    await speechPromise;
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Subtitle / annotation overlay
+// caption — visual text overlay
 // ---------------------------------------------------------------------------
 
 /**
- * Show a subtitle text overlay on the page for `durationMs` milliseconds.
+ * Show a caption text overlay on the page for `durationMs` milliseconds.
  * Useful as a visual annotation in recordings. No-op when HUD is inactive.
  */
-export async function subtitle(page: Page, text: string, durationMs = 3000): Promise<void> {
+export async function caption(page: Page, text: string, durationMs = 3000): Promise<void> {
   if (!(await isHudActive(page))) return;
 
   await page.evaluate(
@@ -316,7 +339,6 @@ export async function subtitle(page: Page, text: string, durationMs = 3000): Pro
         `animation:qa-sub-fade ${d}ms ease-out forwards`,
       ].join(";");
 
-      // Inject animation if not present
       if (!document.querySelector("#qa-sub-style")) {
         const style = document.createElement("style");
         style.id = "qa-sub-style";
@@ -338,20 +360,48 @@ export async function subtitle(page: Page, text: string, durationMs = 3000): Pro
   );
 }
 
+/** @deprecated Use `caption()` instead. */
+export const subtitle = caption;
+
+// ---------------------------------------------------------------------------
+// annotate — caption + narration + optional callback
+// ---------------------------------------------------------------------------
+
 /**
- * Show a subtitle + speak it via TTS simultaneously.
- * No-op when HUD is inactive.
+ * Show a caption + speak it via TTS simultaneously.
+ * When called with a callback, runs the actions in parallel with
+ * the narration — waiting for whichever takes longer.
+ *
+ * ```ts
+ * // Caption + TTS
+ * await annotate(page, "Welcome to the tour");
+ *
+ * // Caption + TTS + actions
+ * await annotate(page, "Let's fill the form", async () => {
+ *   await clickEl(page, "#name");
+ *   await typeKeys(page, "Alice");
+ * });
+ * ```
+ *
+ * No-op when HUD is inactive (callback still runs).
  */
 export async function annotate(
   page: Page,
   text: string,
-  options?: { durationMs?: number; rate?: number; voice?: string },
+  callbackOrOptions?: (() => Promise<void>) | { durationMs?: number; rate?: number; voice?: string },
+  callback?: () => Promise<void>,
 ): Promise<void> {
-  if (!(await isHudActive(page))) return;
+  const cb = typeof callbackOrOptions === "function" ? callbackOrOptions : callback;
+  const options = typeof callbackOrOptions === "object" ? callbackOrOptions : undefined;
+
+  if (!(await isHudActive(page))) {
+    await cb?.();
+    return;
+  }
 
   const durationMs = options?.durationMs ?? 4000;
   await Promise.all([
-    subtitle(page, text, durationMs),
-    narrate(page, text, { rate: options?.rate, voice: options?.voice }),
+    caption(page, text, durationMs),
+    narrate(page, text, { rate: options?.rate, voice: options?.voice }, cb),
   ]);
 }

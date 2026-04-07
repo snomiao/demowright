@@ -23,7 +23,7 @@ Below is a comparison of **seven approaches**, from simplest to most invasive.
 ## 0 — Explicit Helpers (status quo)
 
 ```ts
-import { clickEl, typeKeys, narrate } from "qa-hud/helpers";
+import { clickEl, typeKeys, narrate } from "demowright/helpers";
 
 await clickEl(page, "#submit"); // animated cursor + ripple + click
 await typeKeys(page, "hello", 65, "#input");
@@ -163,7 +163,7 @@ function wrapPage(page: Page): Page {
 Provide a custom fixture that gives the user a `hudPage` (or overrides `page`):
 
 ```ts
-// qa-hud fixture
+// demowright fixture
 export const test = base.extend({
   page: async ({ page, context }, use) => {
     await applyHud(context);
@@ -183,7 +183,7 @@ export const test = base.extend({
 
 **Pros:**
 
-- User just changes the import: `import { test } from 'qa-hud'` — existing `page.click()` calls get animated
+- User just changes the import: `import { test } from 'demowright'` — existing `page.click()` calls get animated
 - Scoped — only affects tests using this fixture
 - Can combine with the Proxy approach for locator coverage
 - Natural place to add TTS/subtitles via `test.step()` integration
@@ -267,7 +267,7 @@ document.addEventListener("focus", (e) => {
 
 ```
 Layer 1 — Fixture (approach 4)
-  └─ import { test } from 'qa-hud'
+  └─ import { test } from 'demowright'
   └─ page.click() / page.fill() automatically animate cursor
   └─ Zero changes to existing page.* calls
 

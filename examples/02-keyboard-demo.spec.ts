@@ -7,7 +7,8 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { clickEl, hudWait, subtitle, moveToEl } from "../src/helpers.js";
+import { moveToEl, clickEl } from "../src/helpers.js";
+import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head>
@@ -61,8 +62,8 @@ const HTML = `<!DOCTYPE html>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <script>
     const initialCode = [
-      '// QA HUD — Playwright video overlay',
-      'import { test, expect } from "qa-hud";',
+      '// demowright — Playwright video overlay',
+      'import { test, expect } from "demowright";',
       '',
       'const config = {',
       '  cursor: true,',
@@ -107,7 +108,7 @@ const HTML = `<!DOCTYPE html>
       });
 
       // Tab switching
-      const tabs = { tab1: initialCode, tab2: '// utils.ts\\nexport function add(a: number, b: number) {\\n  return a + b;\\n}', tab3: '{\\n  "name": "qa-hud",\\n  "version": "1.0.0"\\n}' };
+      const tabs = { tab1: initialCode, tab2: '// utils.ts\\nexport function add(a: number, b: number) {\\n  return a + b;\\n}', tab3: '{\\n  "name": "demowright",\\n  "version": "1.0.0"\\n}' };
       const langs = { tab1: 'typescript', tab2: 'typescript', tab3: 'json' };
       let currentTab = 'tab1';
 
@@ -143,94 +144,116 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("monaco editor — typing, shortcuts, tab switching", async ({ page }) => {
+  const plan = createVideoScript()
+    .segment(
+      "Welcome to the Monaco Editor demo. We are loading a TypeScript file inside a VS Code style editor. Let's wait for it to initialize and then click into the editor to focus it.",
+      async (pace) => {
+        await page.waitForFunction(() => (window as any).__editorReady === true, null, { timeout: 30_000 });
+        await pace();
+        await page.click("#editor-container .view-lines");
+        await pace();
+      },
+    )
+    .segment(
+      "Now we navigate to the end of the file using Control plus End, so we can append new code at the bottom.",
+      async (pace) => {
+        await page.keyboard.press("Control+End");
+        await pace();
+      },
+    )
+    .segment(
+      "Let's type some new test code. We will add a comment, a test function with an assertion, and close the block. Watch the key badges appear as each character is typed into the editor in real time.",
+      async (pace) => {
+        await page.keyboard.press("Enter");
+        await page.keyboard.press("Enter");
+        await page.keyboard.type("// New test added by demowright", { delay: 55 });
+        await pace();
+        await page.keyboard.press("Enter");
+        await page.keyboard.type('test("new", async () => {', { delay: 50 });
+        await pace();
+        await page.keyboard.press("Enter");
+        await page.keyboard.type("  expect(true).toBe(true);", { delay: 45 });
+        await pace();
+        await page.keyboard.press("Enter");
+        await page.keyboard.type("});", { delay: 60 });
+        await pace();
+      },
+    )
+    .segment(
+      "Great, the code is written. Now let's save the file with Control plus S. You should see the saved indicator flash briefly in the status bar.",
+      async (pace) => {
+        await page.keyboard.press("Control+s");
+        await pace();
+      },
+    )
+    .segment(
+      "Next we select all the code with Control plus A to highlight everything, then press Escape to deselect and return to normal editing mode.",
+      async (pace) => {
+        await page.keyboard.press("Control+a");
+        await pace();
+        await page.keyboard.press("Escape");
+        await pace();
+      },
+    )
+    .segment(
+      "Let's test undo and redo. We press Control plus Z to undo the last change, then Control Shift Z to redo it back so our new code is restored.",
+      async (pace) => {
+        await page.keyboard.press("Control+z");
+        await pace();
+        await page.keyboard.press("Control+Shift+z");
+        await pace();
+      },
+    )
+    .segment(
+      "Now we switch between editor tabs. First we click utils dot ts, then config dot json, and finally back to main dot ts to see our original file with the new test code.",
+      async (pace) => {
+        await clickEl(page, "#tab2");
+        await pace();
+        await clickEl(page, "#tab3");
+        await pace();
+        await clickEl(page, "#tab1");
+        await pace();
+      },
+    )
+    .segment(
+      "Let's demonstrate arrow key navigation with selection. We jump to the top of the file with Control Home, then hold Shift and press Arrow Down three times to select multiple lines.",
+      async (pace) => {
+        await page.keyboard.press("Control+Home");
+        await pace();
+        for (let i = 0; i < 3; i++) {
+          await page.keyboard.press("Shift+ArrowDown");
+          await pace();
+        }
+        await page.keyboard.press("Escape");
+        await pace();
+      },
+    )
+    .segment(
+      "Finally, let's click the toolbar buttons. We move to the Run button and click it, then click the Format button. That completes our Monaco Editor keyboard demo.",
+      async (pace) => {
+        await moveToEl(page, "#btn-run");
+        await pace();
+        await clickEl(page, "#btn-run");
+        await pace();
+        await clickEl(page, "#btn-fmt");
+        await pace();
+      },
+    );
+
   await page.goto(baseUrl);
 
-  // Wait for Monaco to load from CDN and initialize
-  await page.waitForFunction(() => (window as any).__editorReady === true, null, { timeout: 30_000 });
-  await hudWait(page, 600);
+  const result = await plan.run(page);
 
-  // 1. Click into the editor to focus it
-  await page.click("#editor-container .view-lines");
-  await hudWait(page, 300);
-
-  // 2. Go to end of file
-  await subtitle(page, "Navigating to end of file");
-  await page.keyboard.press("Control+End");
-  await hudWait(page, 400);
-
-  // 3. Type new code using native keyboard — HUD captures key badges automatically
-  await subtitle(page, "Writing new test code");
-  await page.keyboard.press("Enter");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("// New test added by QA HUD", { delay: 55 });
-  await hudWait(page, 300);
-
-  await page.keyboard.press("Enter");
-  await page.keyboard.type('test("new", async () => {', { delay: 50 });
-  await hudWait(page, 200);
-
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("  expect(true).toBe(true);", { delay: 45 });
-  await hudWait(page, 200);
-
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("});", { delay: 60 });
-  await hudWait(page, 500);
-
-  // 4. Ctrl+S — save
-  await subtitle(page, "Saving with Ctrl+S");
-  await page.keyboard.press("Control+s");
-  await hudWait(page, 800);
-
-  // 5. Select all (Ctrl+A) then deselect
-  await subtitle(page, "Selecting all code");
-  await page.keyboard.press("Control+a");
-  await hudWait(page, 600);
-  await page.keyboard.press("Escape");
-  await hudWait(page, 300);
-
-  // 6. Undo last change (Ctrl+Z)
-  await subtitle(page, "Undoing with Ctrl+Z");
-  await page.keyboard.press("Control+z");
-  await hudWait(page, 300);
-  // Redo it back
-  await page.keyboard.press("Control+Shift+z");
-  await hudWait(page, 500);
-
-  // 7. Switch tabs
-  await subtitle(page, "Switching editor tabs");
-  await clickEl(page, "#tab2");
-  await hudWait(page, 600);
-
-  await clickEl(page, "#tab3");
-  await hudWait(page, 600);
-
-  await clickEl(page, "#tab1");
-  await hudWait(page, 400);
-
-  // 8. Arrow key navigation with Shift selection
-  await subtitle(page, "Selecting with Shift+Arrow");
-  await page.keyboard.press("Control+Home");
-  await hudWait(page, 200);
-  for (let i = 0; i < 3; i++) {
-    await page.keyboard.press("Shift+ArrowDown");
-    await hudWait(page, 150);
+  for (const entry of result.timeline) {
+    console.log(
+      `  [${entry.startMs.toFixed(0).padStart(6)}ms] "${entry.text.slice(0, 50)}…" — ${entry.durationMs.toFixed(0)}ms`,
+    );
   }
-  await hudWait(page, 400);
-  await page.keyboard.press("Escape");
-  await hudWait(page, 300);
-
-  // 9. Click toolbar buttons
-  await moveToEl(page, "#btn-run");
-  await hudWait(page, 200);
-  await clickEl(page, "#btn-run");
-  await hudWait(page, 300);
-  await clickEl(page, "#btn-fmt");
-  await hudWait(page, 500);
+  console.log(`  Total: ${result.totalMs.toFixed(0)}ms`);
 
   // Verify the typed code is in the editor
   const content = await page.evaluate(() => (window as any).__monacoEditor.getValue());
-  expect(content).toContain("// New test added by QA HUD");
+  expect(content).toContain("// New test added by demowright");
   expect(content).toContain('test("new", async () => {');
   expect(content).toContain("expect(true).toBe(true);");
 });

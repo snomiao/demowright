@@ -46,11 +46,7 @@ test("captures audio from Web Audio API oscillator", async () => {
 
   // Must use Chromium — Firefox/WebKit keep AudioContext suspended in headless
   const browser = await chromium.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-gpu",
-      "--autoplay-policy=no-user-gesture-required",
-    ],
+    args: ["--no-sandbox", "--disable-gpu", "--autoplay-policy=no-user-gesture-required"],
   });
 
   const ctx = await browser.newContext();

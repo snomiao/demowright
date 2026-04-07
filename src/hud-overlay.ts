@@ -44,6 +44,7 @@ function listenerMain() {
     onMouseUp: null as (() => void) | null,
     onKeyDown: null as ((label: string, isModifier: boolean) => void) | null,
     onKeyUp: null as ((key: string) => void) | null,
+    onAnnotate: null as ((text: string, durationMs: number) => void) | null,
   };
   (window as any).__qaHud = state;
 
@@ -153,6 +154,26 @@ function domInjector(opts: HudOptions) {
       70%  { opacity: 1; transform: translateY(0); }
       100% { opacity: 0; transform: translateY(-10px); }
     }
+    .qa-subtitle {
+      position: fixed; bottom: 60px; left: 50%;
+      transform: translateX(-50%);
+      max-width: 80vw; text-align: center;
+      pointer-events: none; z-index: 2147483647;
+    }
+    .qa-subtitle-text {
+      display: inline-block;
+      background: rgba(0,0,0,0.8); color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 18px; line-height: 1.4;
+      padding: 8px 18px; border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      animation: qa-subtitle-fade var(--qa-subtitle-ms, 3000ms) ease-out forwards;
+    }
+    @keyframes qa-subtitle-fade {
+      0%   { opacity: 1; }
+      80%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
   `;
   host.appendChild(styleEl);
 
@@ -165,6 +186,10 @@ function domInjector(opts: HudOptions) {
   const keysEl = document.createElement("div");
   keysEl.className = "qa-keys";
   host.appendChild(keysEl);
+
+  const subtitleEl = document.createElement("div");
+  subtitleEl.className = "qa-subtitle";
+  host.appendChild(subtitleEl);
 
   const activeModifiers = new Map<string, HTMLElement>();
 
@@ -206,5 +231,14 @@ function domInjector(opts: HudOptions) {
       el.remove();
       activeModifiers.delete(key);
     }
+  };
+  state.onAnnotate = (text: string, durationMs: number) => {
+    const el = document.createElement("div");
+    el.className = "qa-subtitle-text";
+    el.style.setProperty("--qa-subtitle-ms", durationMs + "ms");
+    el.textContent = text;
+    subtitleEl.innerHTML = "";
+    subtitleEl.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
   };
 }

@@ -1,10 +1,10 @@
 # Helpers API
 
-Import: `import { clickEl, typeKeys, moveTo, hudWait } from "qa-hud/helpers"` or from `"qa-hud"` directly.
+Import: `import { clickEl, typeKeys, moveTo, hudWait } from "demowright/helpers"` or from `"demowright"` directly.
 
 ## Overview
 
-All helpers detect whether qa-hud is active on the page. When inactive (normal test runs), they either skip entirely or take a fast path — so tests remain fast in CI.
+All helpers detect whether demowright is active on the page. When inactive (normal test runs), they either skip entirely or take a fast path — so tests remain fast in CI.
 
 ## Reference
 

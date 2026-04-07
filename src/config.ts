@@ -2,11 +2,11 @@
  * Approach 3: Config helper (one line in playwright.config.ts).
  *
  *   import { defineConfig } from '@playwright/test';
- *   import { withQaHud } from 'qa-hud/config';
+ *   import { withDemowright } from 'demowright/config';
  *
- *   export default withQaHud(defineConfig({ ... }));
+ *   export default withDemowright(defineConfig({ ... }));
  *
- * Sets NODE_OPTIONS to --require qa-hud/register so the HUD is injected
+ * Sets NODE_OPTIONS to --require demowright/register so the HUD is injected
  * into every BrowserContext automatically. No test file changes needed.
  */
 import { createRequire } from "node:module";
@@ -15,7 +15,7 @@ import { type QaHudOptions, defaultOptions } from "./setup.js";
 
 export type { QaHudOptions };
 
-export function withQaHud(
+export function withDemowright(
   config: PlaywrightTestConfig,
   options?: Partial<QaHudOptions>,
 ): PlaywrightTestConfig {
@@ -35,6 +35,10 @@ export function withQaHud(
   if (opts.keyFadeMs !== defaultOptions.keyFadeMs)
     process.env.QA_HUD_KEY_FADE = String(opts.keyFadeMs);
   if (typeof opts.tts === "string") process.env.QA_HUD_TTS = opts.tts;
+  if (opts.audio) process.env.QA_HUD_AUDIO = typeof opts.audio === "string" ? opts.audio : "1";
+  if (opts.autoAnnotate) process.env.QA_HUD_AUTO_ANNOTATE = "1";
+  if (opts.outputDir !== defaultOptions.outputDir)
+    process.env.QA_HUD_OUTPUT_DIR = opts.outputDir;
 
   // Inject --require into NODE_OPTIONS so it runs in every worker
   const flag = `--require ${registerPath}`;

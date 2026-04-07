@@ -1,11 +1,12 @@
 /**
  * Example 4: Narrated product tour
- * Demonstrates TTS narration and subtitle features — a stakeholder-ready
+ * Demonstrates TTS narration and caption features — a stakeholder-ready
  * walkthrough of a SaaS landing page with hero, features, pricing, and signup.
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { moveToEl, clickEl, typeKeys, hudWait, subtitle, annotate } from "../src/helpers.js";
+import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
+import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -201,84 +202,77 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("narrated product tour — hero, features, pricing, signup", async ({ page }) => {
+  const plan = createVideoScript()
+    .segment(
+      "Welcome to AcmeApp. Let's take a guided tour of this modern SaaS landing page and explore everything it has to offer.",
+      async (pace) => {
+        await moveToEl(page, ".hero h1");
+        await pace();
+        await moveToEl(page, ".hero p");
+        await pace();
+        await moveToEl(page, ".cta-hero");
+        await pace();
+      },
+    )
+    .segment(
+      "Scrolling down to the features section. AcmeApp provides instant deploys, built-in security, and real-time analytics — all out of the box.",
+      async (pace) => {
+        await page.evaluate(() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }));
+        await pace();
+        await moveToEl(page, "#feat-1");
+        await pace();
+        await moveToEl(page, "#feat-2");
+        await pace();
+        await moveToEl(page, "#feat-3");
+        await pace();
+      },
+    )
+    .segment(
+      "Now let's look at the pricing options. There's a free Starter tier for small projects, and a Pro plan at twenty-nine dollars a month for teams that need more.",
+      async (pace) => {
+        await page.evaluate(() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" }));
+        await pace();
+        await moveToEl(page, "#tier-starter");
+        await pace();
+        await moveToEl(page, "#tier-pro");
+        await pace();
+      },
+    )
+    .segment(
+      "Let's sign up for an account. We'll click Get Started, fill in the name field with Jane Doe, tab over to email, enter the address, and then create the account.",
+      async (pace) => {
+        await clickEl(page, "#hero-cta");
+        await pace();
+        await clickEl(page, "#f-name");
+        await page.evaluate(() => (document.querySelector("#f-name") as HTMLInputElement).focus());
+        await typeKeys(page, "Jane Doe", 65, "#f-name");
+        await pace();
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
+        );
+        await page.evaluate(() => (document.querySelector("#f-email") as HTMLInputElement).focus());
+        await moveToEl(page, "#f-email");
+        await typeKeys(page, "jane@acmeapp.com", 55, "#f-email");
+        await pace();
+        await clickEl(page, "#create-btn");
+        await pace();
+      },
+    )
+    .segment(
+      "And there we go — the account has been created successfully. That wraps up our product tour of AcmeApp. Thanks for watching!",
+    );
+
   await page.goto(baseUrl);
-  await hudWait(page, 600);
 
-  // 1. Welcome
-  await annotate(page, "Welcome to AcmeApp — let's take a tour");
-  await hudWait(page, 500);
+  const result = await plan.run(page);
 
-  // 2. Explore the hero section
-  await subtitle(page, "Hero section");
-  await moveToEl(page, ".hero h1");
-  await hudWait(page, 400);
-  await moveToEl(page, ".hero p");
-  await hudWait(page, 300);
-  await moveToEl(page, ".cta-hero");
-  await hudWait(page, 400);
+  for (const entry of result.timeline) {
+    console.log(
+      `  [${entry.startMs.toFixed(0).padStart(6)}ms] "${entry.text.slice(0, 50)}…" — ${entry.durationMs.toFixed(0)}ms`,
+    );
+  }
+  console.log(`  Total: ${result.totalMs.toFixed(0)}ms`);
 
-  // 3. Scroll to features and hover each card
-  await annotate(page, "Here are the key features");
-  await page.evaluate(() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }));
-  await hudWait(page, 600);
-
-  await subtitle(page, "Instant Deploys");
-  await moveToEl(page, "#feat-1");
-  await hudWait(page, 500);
-
-  await subtitle(page, "Built-in Security");
-  await moveToEl(page, "#feat-2");
-  await hudWait(page, 500);
-
-  await subtitle(page, "Real-time Analytics");
-  await moveToEl(page, "#feat-3");
-  await hudWait(page, 500);
-
-  // 4. Scroll to pricing and hover tiers
-  await annotate(page, "Let's look at pricing");
-  await page.evaluate(() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" }));
-  await hudWait(page, 600);
-
-  await subtitle(page, "Starter — free forever");
-  await moveToEl(page, "#tier-starter");
-  await hudWait(page, 500);
-
-  await subtitle(page, "Pro — for growing teams");
-  await moveToEl(page, "#tier-pro");
-  await hudWait(page, 500);
-
-  // 5. Click "Get Started" to open signup modal
-  await annotate(page, "Now let's sign up");
-  await clickEl(page, "#hero-cta");
-  await hudWait(page, 600);
-
-  // 6. Fill the signup form
-  await subtitle(page, "Filling in account details");
-  await clickEl(page, "#f-name");
-  await page.evaluate(() => (document.querySelector("#f-name") as HTMLInputElement).focus());
-  await hudWait(page, 150);
-  await typeKeys(page, "Jane Doe", 65, "#f-name");
-  await hudWait(page, 300);
-
-  await page.evaluate(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })),
-  );
-  await page.evaluate(() => (document.querySelector("#f-email") as HTMLInputElement).focus());
-  await hudWait(page, 200);
-  await moveToEl(page, "#f-email");
-  await hudWait(page, 100);
-  await typeKeys(page, "jane@acmeapp.com", 55, "#f-email");
-  await hudWait(page, 300);
-
-  // 7. Click "Create Account"
-  await clickEl(page, "#create-btn");
-  await hudWait(page, 600);
-
-  // 8. Narrate success
-  await annotate(page, "Account created! That's our product tour");
-  await hudWait(page, 500);
-
-  // 9. Verify success state
   const success = await page.evaluate(() => document.getElementById("signup-success")?.style.display);
   expect(success).toBe("block");
 });

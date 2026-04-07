@@ -46,7 +46,7 @@ kill $AUDIO_PID
 ffmpeg -i test-results/video.webm -i audio.wav -c:v copy -c:a aac -shortest output.mp4
 ```
 
-**Integration with qa-hud fixture:**
+**Integration with demowright fixture:**
 
 ```ts
 import { spawn, execSync } from "child_process";
@@ -295,7 +295,7 @@ for (const n of narrations) {
 | **CI/Linux pipelines**              | [#1 PulseAudio + ffmpeg](#1-pulseaudio--ffmpeg) — simplest, reliable                                |
 | **Capturing page audio precisely**  | [#2 Web Audio API](#2-web-audio-api-capture-in-page) — cross-platform, headless                     |
 | **Full-fidelity tab recording**     | [#3 Chrome Extension](#3-chrome-extension-tabcapture) or [#4 puppeteer-stream](#4-puppeteer-stream) |
-| **AI video analysis (like Gemini)** | [#7 TTS narration](#7-tts-narration-overlay-alternative) + qa-hud visual overlay — no audio needed  |
+| **AI video analysis (like Gemini)** | [#7 TTS narration](#7-tts-narration-overlay-alternative) + demowright visual overlay — no audio needed  |
 | **WYSIWYG recording for demos**     | [#5 Xvfb + ffmpeg](#5-xvfb--ffmpeg-full-screen-recording)                                           |
 
-For qa-hud's primary use case (making Playwright videos readable for AI analysis), **audio is usually not needed** — the visual HUD overlay (cursor + keyboard badges) provides all the context. If audio is required, approach #1 (PulseAudio) or #2 (Web Audio API) are the most practical to integrate as a qa-hud plugin.
+For demowright's primary use case (making Playwright videos readable for AI analysis), **audio is usually not needed** — the visual HUD overlay (cursor + keyboard badges) provides all the context. If audio is required, approach #1 (PulseAudio) or #2 (Web Audio API) are the most practical to integrate as a demowright plugin.

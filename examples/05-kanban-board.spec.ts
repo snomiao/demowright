@@ -5,7 +5,8 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { moveToEl, clickEl, typeKeys, hudWait, subtitle, annotate } from "../src/helpers.js";
+import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
+import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -205,97 +206,107 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("kanban board — move cards between columns, add a task", async ({ page }) => {
+  const plan = createVideoScript()
+    .segment(
+      "Welcome to our sprint board. Let's review all the columns and cards before we start organizing the work.",
+      async (pace) => {
+        await moveToEl(page, "#header-todo");
+        await pace();
+        await moveToEl(page, "#card-1");
+        await pace();
+        await moveToEl(page, "#card-2");
+        await pace();
+        await moveToEl(page, "#card-3");
+        await pace();
+      },
+    )
+    .segment(
+      "Now let's look at the In Progress column. There are two tasks currently being worked on by the team.",
+      async (pace) => {
+        await moveToEl(page, "#header-progress");
+        await pace();
+        await moveToEl(page, "#card-4");
+        await pace();
+        await moveToEl(page, "#card-5");
+        await pace();
+      },
+    )
+    .segment(
+      "And here's the Done column. Two tasks have already been completed this sprint. Good progress so far.",
+      async (pace) => {
+        await moveToEl(page, "#header-done");
+        await pace();
+        await moveToEl(page, "#card-6");
+        await pace();
+        await moveToEl(page, "#card-7");
+        await pace();
+      },
+    )
+    .segment(
+      "Let's move the CI pipeline task from To Do into In Progress. We select the card, then click the target column header.",
+      async (pace) => {
+        await clickEl(page, "#card-1");
+        await pace();
+        await clickEl(page, "#header-progress");
+        await pace();
+      },
+    )
+    .segment(
+      "Next we'll move the dashboard widgets task from In Progress over to Done, since that work is now complete.",
+      async (pace) => {
+        await clickEl(page, "#card-5");
+        await pace();
+        await clickEl(page, "#header-done");
+        await pace();
+      },
+    )
+    .segment(
+      "Finally, let's add a brand new task to the board. We click the add button, type in the task name, and press Enter to confirm.",
+      async (pace) => {
+        await clickEl(page, "#add-task-btn");
+        await pace();
+        await clickEl(page, "#new-task-input");
+        await page.evaluate(() => (document.querySelector("#new-task-input") as HTMLInputElement).focus());
+        await pace();
+        await typeKeys(page, "Implement dark mode", 65, "#new-task-input");
+        await pace();
+        await page.evaluate(() => {
+          const input = document.querySelector("#new-task-input") as HTMLInputElement;
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        });
+        await pace();
+      },
+    )
+    .segment(
+      "And that's it — our sprint board is now fully organized. Tasks have been moved and a new item has been added successfully.",
+    );
+
   await page.goto(baseUrl);
-  await hudWait(page, 600);
 
-  // 1. Annotate start
-  await annotate(page, "Let's organize our sprint board");
-  await hudWait(page, 400);
+  const result = await plan.run(page);
 
-  // 2. Hover over each column to show the cards
-  await subtitle(page, "Reviewing the board");
-  await moveToEl(page, "#header-todo");
-  await hudWait(page, 300);
-  await moveToEl(page, "#card-1");
-  await hudWait(page, 200);
-  await moveToEl(page, "#card-2");
-  await hudWait(page, 200);
-  await moveToEl(page, "#card-3");
-  await hudWait(page, 200);
+  for (const entry of result.timeline) {
+    console.log(
+      `  [${entry.startMs.toFixed(0).padStart(6)}ms] "${entry.text.slice(0, 50)}…" — ${entry.durationMs.toFixed(0)}ms`,
+    );
+  }
+  console.log(`  Total: ${result.totalMs.toFixed(0)}ms`);
 
-  await moveToEl(page, "#header-progress");
-  await hudWait(page, 300);
-  await moveToEl(page, "#card-4");
-  await hudWait(page, 200);
-  await moveToEl(page, "#card-5");
-  await hudWait(page, 200);
-
-  await moveToEl(page, "#header-done");
-  await hudWait(page, 300);
-  await moveToEl(page, "#card-6");
-  await hudWait(page, 200);
-  await moveToEl(page, "#card-7");
-  await hudWait(page, 200);
-  await hudWait(page, 300);
-
-  // 3. Move a To Do card to In Progress
-  await subtitle(page, "Moving task to In Progress");
-  await hudWait(page, 200);
-  await clickEl(page, "#card-1");
-  await hudWait(page, 400);
-  await clickEl(page, "#header-progress");
-  await hudWait(page, 600);
-
-  // 4. Move an In Progress card to Done
-  await subtitle(page, "Moving task to Done");
-  await hudWait(page, 200);
-  await clickEl(page, "#card-5");
-  await hudWait(page, 400);
-  await clickEl(page, "#header-done");
-  await hudWait(page, 600);
-
-  // 5. Add a new task
-  await subtitle(page, "Adding a new task");
-  await hudWait(page, 200);
-  await clickEl(page, "#add-task-btn");
-  await hudWait(page, 300);
-  await clickEl(page, "#new-task-input");
-  await page.evaluate(() => (document.querySelector("#new-task-input") as HTMLInputElement).focus());
-  await hudWait(page, 150);
-  await typeKeys(page, "Implement dark mode", 65, "#new-task-input");
-  await hudWait(page, 300);
-
-  // Press Enter to add
-  await page.evaluate(() => {
-    const input = document.querySelector("#new-task-input") as HTMLInputElement;
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
-  await hudWait(page, 600);
-
-  // 6. Annotate done
-  await annotate(page, "Sprint board organized!");
-  await hudWait(page, 400);
-
-  // 7. Verify cards are in the correct columns
-  // card-1 should now be in progress
   const card1Col = await page.evaluate(() => document.getElementById("card-1")?.closest(".column")?.id);
   expect(card1Col).toBe("col-progress");
 
-  // card-5 should now be in done
   const card5Col = await page.evaluate(() => document.getElementById("card-5")?.closest(".column")?.id);
   expect(card5Col).toBe("col-done");
 
-  // New card should be in to-do
   const newCardCol = await page.evaluate(() => document.getElementById("card-new")?.closest(".column")?.id);
   expect(newCardCol).toBe("col-todo");
 
-  // Verify count badges
   const todoCt = await page.evaluate(() => document.getElementById("count-todo")?.textContent);
-  expect(todoCt).toBe("3"); // was 3, -1 moved out, +1 added = 3
+  expect(todoCt).toBe("3");
 
   const progressCt = await page.evaluate(() => document.getElementById("count-progress")?.textContent);
-  expect(progressCt).toBe("2"); // was 2, +1 moved in, -1 moved out = 2
+  expect(progressCt).toBe("2");
 
   const doneCt = await page.evaluate(() => document.getElementById("count-done")?.textContent);
-  expect(doneCt).toBe("3"); // was 2, +1 moved in = 3
+  expect(doneCt).toBe("3");
 });

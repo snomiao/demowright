@@ -1,26 +1,26 @@
 # Getting Started
 
-## What is qa-hud?
+## What is demowright?
 
 Playwright plugin that overlays a visible cursor, keystroke badges, click ripples, and auto-slowdown into test video recordings. Makes videos readable by humans and AI.
 
 ## Installation
 
 ```bash
-npm install qa-hud
+npm install demowright
 ```
 
 ## Four Integration Methods
 
 ### Method 1: Config helper (recommended)
 
-Zero test file changes. Wrap your config with `withQaHud`:
+Zero test file changes. Wrap your config with `withDemowright`:
 
 ```ts
 import { defineConfig } from "@playwright/test";
-import { withQaHud } from "qa-hud/config";
+import { withDemowright } from "demowright/config";
 
-export default withQaHud(defineConfig({ use: { video: "on" } }));
+export default withDemowright(defineConfig({ use: { video: "on" } }));
 ```
 
 ### Method 2: CLI flag
@@ -28,19 +28,19 @@ export default withQaHud(defineConfig({ use: { video: "on" } }));
 Zero code changes at all:
 
 ```bash
-NODE_OPTIONS="--require qa-hud/register" npx playwright test
+NODE_OPTIONS="--require demowright/register" npx playwright test
 ```
 
 ### Method 3: Import replacement
 
 ```ts
-import { test, expect } from "qa-hud"; // instead of @playwright/test
+import { test, expect } from "demowright"; // instead of @playwright/test
 ```
 
 ### Method 4: Programmatic
 
 ```ts
-import { applyHud } from "qa-hud";
+import { applyHud } from "demowright";
 
 await applyHud(context, { cursor: true, keyboard: true, actionDelay: 150 });
 ```

@@ -2,7 +2,7 @@
 
 ## Cursor Overlay
 
-qa-hud renders a visible SVG cursor that follows mouse movement. Three built-in styles:
+demowright renders a visible SVG cursor that follows mouse movement. Three built-in styles:
 
 ### Styles
 - **`default`** — White arrow pointer with black outline (classic cursor look)
@@ -10,7 +10,7 @@ qa-hud renders a visible SVG cursor that follows mouse movement. Three built-in 
 - **`crosshair`** — Red crosshair with circle (precise, technical demos)
 
 ```ts
-export default withQaHud(defineConfig({...}), {
+export default withDemowright(defineConfig({...}), {
   cursorStyle: "dot",
 });
 ```
