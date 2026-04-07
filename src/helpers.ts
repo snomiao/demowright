@@ -10,6 +10,44 @@ import type { Page } from "@playwright/test";
 import { isHudActive, getTtsProvider, storeAudioSegment } from "./hud-registry.js";
 
 // ---------------------------------------------------------------------------
+// evaluateWithTimeout — page.evaluate that won't hang on blocked event loops
+// ---------------------------------------------------------------------------
+
+/**
+ * Run `page.evaluate(...)` but reject after `timeoutMs` if the page event
+ * loop is blocked (heavy SSR hydration, busy service worker, etc.).
+ *
+ * On timeout, logs a warning and resolves with `undefined` so recordings
+ * keep going instead of hitting the full Playwright test timeout.
+ */
+async function evaluateWithTimeout<R>(
+  page: Page,
+  fn: Parameters<Page["evaluate"]>[0],
+  arg?: unknown,
+  timeoutMs = 10_000,
+  label = "page.evaluate",
+): Promise<R | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return (await Promise.race([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (page.evaluate as any)(fn, arg),
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[demowright] ${label} timed out after ${timeoutMs}ms — page event loop likely blocked. Skipping.`,
+          );
+          resolve(undefined);
+        }, timeoutMs);
+      }),
+    ])) as R | undefined;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // hudWait — delay that only runs when HUD is active
 // ---------------------------------------------------------------------------
 
@@ -272,7 +310,8 @@ export async function narrate(
     voice: options?.voice,
   };
 
-  const speechPromise = page.evaluate(
+  const speechPromise = evaluateWithTimeout(
+    page,
     ([t, o]: [string, typeof opts]) => {
       return new Promise<void>((resolve) => {
         const synth = window.speechSynthesis;
@@ -296,6 +335,8 @@ export async function narrate(
       });
     },
     [text, opts] as [string, typeof opts],
+    10_000,
+    "narrate(speechSynthesis)",
   );
 
   if (cb) {
@@ -316,7 +357,8 @@ export async function narrate(
 export async function caption(page: Page, text: string, durationMs = 3000): Promise<void> {
   if (!(await isHudActive(page))) return;
 
-  await page.evaluate(
+  await evaluateWithTimeout(
+    page,
     ([t, d]: [string, number]) => {
       const el = document.createElement("div");
       el.textContent = t;
@@ -357,6 +399,8 @@ export async function caption(page: Page, text: string, durationMs = 3000): Prom
       setTimeout(() => el.remove(), d);
     },
     [text, durationMs] as [string, number],
+    10_000,
+    "caption",
   );
 }
 
