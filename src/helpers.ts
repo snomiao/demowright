@@ -14,24 +14,24 @@ import { isHudActive, getTtsProvider, storeAudioSegment } from "./hud-registry.j
 // ---------------------------------------------------------------------------
 
 /**
- * Run `page.evaluate(...)` but reject after `timeoutMs` if the page event
- * loop is blocked (heavy SSR hydration, busy service worker, etc.).
+ * Run `page.evaluate(fn, arg)` but bail out after `timeoutMs` if the page
+ * event loop is blocked (heavy SSR hydration, busy service worker, etc.).
  *
  * On timeout, logs a warning and resolves with `undefined` so recordings
- * keep going instead of hitting the full Playwright test timeout.
+ * keep going instead of hitting the full Playwright test timeout. The
+ * underlying `page.evaluate` promise is left to settle on its own.
  */
-async function evaluateWithTimeout<R>(
+async function evaluateWithTimeout<A, R>(
   page: Page,
-  fn: Parameters<Page["evaluate"]>[0],
-  arg?: unknown,
+  fn: (arg: A) => R | Promise<R>,
+  arg: A,
   timeoutMs = 10_000,
   label = "page.evaluate",
 ): Promise<R | undefined> {
   let timer: NodeJS.Timeout | undefined;
   try {
-    return (await Promise.race([
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (page.evaluate as any)(fn, arg),
+    return await Promise.race<R | undefined>([
+      page.evaluate<R, A>(fn, arg),
       new Promise<undefined>((resolve) => {
         timer = setTimeout(() => {
           // eslint-disable-next-line no-console
@@ -41,7 +41,7 @@ async function evaluateWithTimeout<R>(
           resolve(undefined);
         }, timeoutMs);
       }),
-    ])) as R | undefined;
+    ]);
   } finally {
     if (timer) clearTimeout(timer);
   }
