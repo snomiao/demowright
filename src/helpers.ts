@@ -53,14 +53,22 @@ export async function moveTo(page: Page, x: number, y: number, steps = 10): Prom
 
 /**
  * Smoothly move the HUD cursor to the center of `selector`.
- * Returns the element center coordinates.
+ * Returns the element center coordinates, or `null` if the selector
+ * doesn't match any element.
  * When HUD is inactive, resolves coordinates but skips the animation.
  */
-export async function moveToEl(page: Page, selector: string): Promise<{ x: number; y: number }> {
+export async function moveToEl(
+  page: Page,
+  selector: string,
+): Promise<{ x: number; y: number } | null> {
   const center = await page.evaluate((s: string) => {
-    const r = document.querySelector(s)!.getBoundingClientRect();
+    const el = document.querySelector(s);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   }, selector);
+
+  if (!center) return null;
 
   if (await isHudActive(page)) {
     await moveTo(page, center.x, center.y);
@@ -82,6 +90,7 @@ export async function clickEl(page: Page, selector: string): Promise<void> {
   const active = await isHudActive(page);
   if (active) {
     const c = await moveToEl(page, selector);
+    if (!c) return;
     await page.waitForTimeout(150);
     await page.evaluate(
       ([x, y]: [number, number]) => {
