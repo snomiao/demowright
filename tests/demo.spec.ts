@@ -1,5 +1,6 @@
 import http from "node:http";
 import { test, expect } from "../src/index.js";
+import { moveToEl, clickEl } from "../src/helpers.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><style>
@@ -116,6 +117,16 @@ test("modifier keys show persistent badges", async ({ page }) => {
   expect(await page.evaluate(() => !document.querySelector("[data-qa-hud] .qa-key.modifier"))).toBe(
     true,
   );
+});
+
+test("moveToEl returns null on missing selector and clickEl is a no-op", async ({ page }) => {
+  await page.goto(baseUrl);
+
+  const pos = await moveToEl(page, "#does-not-exist");
+  expect(pos).toBeNull();
+
+  // Should not throw even though the element is missing.
+  await expect(clickEl(page, "#does-not-exist")).resolves.toBeUndefined();
 });
 
 test("HUD does not block page interactions", async ({ page }) => {
