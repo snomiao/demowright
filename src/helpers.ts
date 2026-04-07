@@ -10,6 +10,51 @@ import type { Page } from "@playwright/test";
 import { isHudActive, getTtsProvider, storeAudioSegment } from "./hud-registry.js";
 
 // ---------------------------------------------------------------------------
+// evaluateWithTimeout — page.evaluate that won't hang on blocked event loops
+// ---------------------------------------------------------------------------
+
+/**
+ * Run `page.evaluate(fn, arg)` but bail out after `timeoutMs` if the page
+ * event loop is blocked (heavy SSR hydration, busy service worker, etc.).
+ *
+ * On timeout, logs a warning and resolves with `undefined` so recordings
+ * keep going instead of hitting the full Playwright test timeout. The
+ * underlying `page.evaluate` promise is left to settle on its own.
+ */
+async function evaluateWithTimeout<A, R>(
+  page: Page,
+  fn: (arg: A) => R | Promise<R>,
+  arg: A,
+  timeoutMs = 10_000,
+  label = "page.evaluate",
+): Promise<R | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const evalPromise = page.evaluate<R, A>(fn, arg);
+  // Attach a no-op rejection handler to the *original* promise so that, if
+  // we race past it and abandon it, a later rejection (page close, navigate)
+  // can't surface as an unhandled rejection. The original promise itself is
+  // still passed into Promise.race, so legitimate evaluate errors that
+  // happen *before* the timeout are still propagated to the caller.
+  evalPromise.catch(() => {});
+  try {
+    return await Promise.race<R | undefined>([
+      evalPromise,
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[demowright] ${label} timed out after ${timeoutMs}ms — page event loop likely blocked. Skipping.`,
+          );
+          resolve(undefined);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // hudWait — delay that only runs when HUD is active
 // ---------------------------------------------------------------------------
 
@@ -272,7 +317,8 @@ export async function narrate(
     voice: options?.voice,
   };
 
-  const speechPromise = page.evaluate(
+  const speechPromise = evaluateWithTimeout(
+    page,
     ([t, o]: [string, typeof opts]) => {
       return new Promise<void>((resolve) => {
         const synth = window.speechSynthesis;
@@ -296,6 +342,8 @@ export async function narrate(
       });
     },
     [text, opts] as [string, typeof opts],
+    10_000,
+    "narrate(speechSynthesis)",
   );
 
   if (cb) {
@@ -316,7 +364,8 @@ export async function narrate(
 export async function caption(page: Page, text: string, durationMs = 3000): Promise<void> {
   if (!(await isHudActive(page))) return;
 
-  await page.evaluate(
+  await evaluateWithTimeout(
+    page,
     ([t, d]: [string, number]) => {
       const el = document.createElement("div");
       el.textContent = t;
@@ -357,6 +406,8 @@ export async function caption(page: Page, text: string, durationMs = 3000): Prom
       setTimeout(() => el.remove(), d);
     },
     [text, durationMs] as [string, number],
+    10_000,
+    "caption",
   );
 }
 
