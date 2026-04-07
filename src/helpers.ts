@@ -29,9 +29,13 @@ async function evaluateWithTimeout<A, R>(
   label = "page.evaluate",
 ): Promise<R | undefined> {
   let timer: NodeJS.Timeout | undefined;
+  // Swallow rejections from the abandoned evaluate so it can't surface as
+  // an unhandled promise rejection after we've already raced past it (e.g.
+  // the page closes or navigates while the function is still stuck).
+  const evalPromise = page.evaluate<R, A>(fn, arg).catch(() => undefined);
   try {
     return await Promise.race<R | undefined>([
-      page.evaluate<R, A>(fn, arg),
+      evalPromise,
       new Promise<undefined>((resolve) => {
         timer = setTimeout(() => {
           // eslint-disable-next-line no-console
