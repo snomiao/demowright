@@ -5,7 +5,6 @@
     "": {
       "name": "qa-hud",
       "devDependencies": {
-        "@playwright/test": "^1.52.0",
         "@types/node": "^25.5.2",
         "@typescript/native-preview": "^7.0.0-dev.20260405.1",
         "semantic-release": "^25.0.3",
