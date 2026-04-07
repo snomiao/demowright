@@ -43,8 +43,17 @@ export function registerHudPage(page: Page, config?: HudPageConfig): void {
  */
 export async function isHudActive(page: Page): Promise<boolean> {
   if (hudPages.has(page)) return true;
+  // Race the browser-side probe against a short Node-side timer so a blocked
+  // page event loop (heavy SSR hydration, busy service worker, etc.) can't
+  // hang every helper that calls isHudActive.
+  let timer: NodeJS.Timeout | undefined;
   try {
-    const active = await page.evaluate(() => !!(window as any).__qaHud);
+    const active = await Promise.race<boolean>([
+      page.evaluate(() => !!(window as any).__qaHud).catch(() => false),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), 5_000);
+      }),
+    ]);
     if (active) {
       // Cache with global TTS provider (may have been set by another module instance)
       hudPages.set(page, { tts: g.__qaHudGlobal.tts || false });
@@ -52,6 +61,8 @@ export async function isHudActive(page: Page): Promise<boolean> {
     return active;
   } catch {
     return false;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
