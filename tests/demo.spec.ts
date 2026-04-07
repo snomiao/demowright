@@ -122,6 +122,10 @@ test("modifier keys show persistent badges", async ({ page }) => {
 test("moveToEl returns null on missing selector and clickEl is a no-op", async ({ page }) => {
   await page.goto(baseUrl);
 
+  // Lock in HUD-active coverage so a regression in setup can't silently
+  // turn this into a fast-path no-op test.
+  expect(await page.evaluate(() => !!(window as any).__qaHud)).toBe(true);
+
   const pos = await moveToEl(page, "#does-not-exist");
   expect(pos).toBeNull();
 
