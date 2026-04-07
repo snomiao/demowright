@@ -29,10 +29,13 @@ async function evaluateWithTimeout<A, R>(
   label = "page.evaluate",
 ): Promise<R | undefined> {
   let timer: NodeJS.Timeout | undefined;
-  // Swallow rejections from the abandoned evaluate so it can't surface as
-  // an unhandled promise rejection after we've already raced past it (e.g.
-  // the page closes or navigates while the function is still stuck).
-  const evalPromise = page.evaluate<R, A>(fn, arg).catch(() => undefined);
+  const evalPromise = page.evaluate<R, A>(fn, arg);
+  // Attach a no-op rejection handler to the *original* promise so that, if
+  // we race past it and abandon it, a later rejection (page close, navigate)
+  // can't surface as an unhandled rejection. The original promise itself is
+  // still passed into Promise.race, so legitimate evaluate errors that
+  // happen *before* the timeout are still propagated to the caller.
+  evalPromise.catch(() => {});
   try {
     return await Promise.race<R | undefined>([
       evalPromise,
