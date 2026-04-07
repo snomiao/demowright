@@ -18,14 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: oven-sh/setup-bun@v2
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - run: bun install --frozen-lockfile
 
-      - run: npm run build
+      - run: bun run build
 
       - name: Release
         env:
