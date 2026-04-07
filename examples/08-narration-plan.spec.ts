@@ -13,7 +13,7 @@ import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
 import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
-<html><head><style>
+<html><head><title>08 Narration Plan</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0b0b1a; color: #e0e0e0; scroll-behavior: smooth; }
   .navbar { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; background: rgba(11,11,26,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.06); z-index: 200; }

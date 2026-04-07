@@ -13,7 +13,7 @@ import { applyHud } from "../src/setup.js";
 import { clickEl, moveToEl, moveTo, hudWait, annotate, narrate } from "../src/helpers.js";
 
 const HTML = `<!DOCTYPE html>
-<html><head><style>
+<html><head><title>07 Video Player</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0a0a0a; color: #fff; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
   .player { width: 720px; background: #111; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }

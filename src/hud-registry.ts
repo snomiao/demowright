@@ -70,6 +70,14 @@ export function getGlobalTtsProvider(): TtsProvider {
   return g.__qaHudGlobal.tts || false;
 }
 
+export function setCurrentSpec(name: string): void {
+  g.__qaHudGlobal.currentSpec = name;
+}
+
+export function getCurrentSpec(): string | undefined {
+  return g.__qaHudGlobal.currentSpec;
+}
+
 export function setGlobalOutputDir(dir: string): void {
   g.__qaHudGlobal.outputDir = dir;
 }

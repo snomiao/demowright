@@ -9,7 +9,7 @@ import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
 import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
-<html><head><style>
+<html><head><title>03 Form Interaction</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; background: #f8f9fa; color: #333; }
   .navbar { background: #fff; padding: 14px 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }

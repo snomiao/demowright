@@ -17,12 +17,13 @@ if (process.env.QA_HUD === "0") {
   const originalLoad = Module._load;
   let contextProtoPatched = false;
 
+  // Track the current spec file for naming output videos
+  const g = globalThis;
+  if (!g.__qaHudGlobal) g.__qaHudGlobal = { audioSegments: new Map() };
+
   Module._load = function qaHudLoad(request, parent, isMain) {
     const result = originalLoad.call(this, request, parent, isMain);
 
-    // We need to patch BrowserContext.prototype, but it's not exported.
-    // Instead, we patch the BrowserType launch methods to intercept
-    // the Browser they return, then patch Browser.newContext.
     if (!contextProtoPatched && request === "playwright-core") {
       contextProtoPatched = true;
 
@@ -56,6 +57,15 @@ if (process.env.QA_HUD === "0") {
 
   let applyHudCache = null;
   async function applyHudToContext(context) {
+    // Detect spec filename from the call stack or Playwright context metadata
+    try {
+      const stack = new Error().stack || "";
+      const specMatch = stack.match(/([\/\\][\w.-]+\.spec\.[tj]s)/);
+      if (specMatch) {
+        const path = require("node:path");
+        g.__qaHudGlobal.currentSpec = path.basename(specMatch[1]).replace(/\.spec\.[tj]s$/, "");
+      }
+    } catch {}
     try {
       if (!applyHudCache) {
         const mod = await import("./src/setup.ts");

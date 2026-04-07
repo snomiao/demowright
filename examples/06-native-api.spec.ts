@@ -16,7 +16,7 @@ import http from "node:http";
 import { test, expect } from "@playwright/test";
 
 const HTML = `<!DOCTYPE html>
-<html><head><style>
+<html><head><title>06 Native API</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; background: #f0f2f5; color: #333; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
   .card { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); width: 480px; padding: 40px; }

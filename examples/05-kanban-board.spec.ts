@@ -9,7 +9,7 @@ import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
 import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
-<html><head><style>
+<html><head><title>05 Kanban Board</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; background: #0f0f23; color: #ccc; min-height: 100vh; }
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 30px; background: #1a1a3e; border-bottom: 1px solid #333366; }

@@ -8,7 +8,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { generateListenerScript, getDomInjector, type HudOptions } from "./hud-overlay.js";
 import { generateAudioCaptureScript } from "./audio-capture.js";
 import { AudioWriter } from "./audio-writer.js";
-import { registerHudPage, getAudioSegments, getRenderJob, setGlobalOutputDir, type AudioSegment } from "./hud-registry.js";
+import { registerHudPage, getAudioSegments, getRenderJob, setGlobalOutputDir, getCurrentSpec, type AudioSegment } from "./hud-registry.js";
 
 /**
  * TTS provider for narrate().
@@ -139,8 +139,8 @@ export async function applyHud(
         return;
       }
 
-      // Name MP4 from the first page URL, or fallback to timestamp
-      const baseName = pageNames[0] ?? `demowright-${Date.now()}`;
+      // Name MP4 from: spec filename (via registry) > page title > timestamp
+      const baseName = getCurrentSpec() ?? pageNames[0] ?? `demowright-${Date.now()}`;
       const mp4Path = join(outDir, `${baseName}.mp4`);
       const trimSec = (audioOffsetMs / 1000).toFixed(3);
       let muxed = false;
