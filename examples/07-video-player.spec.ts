@@ -186,29 +186,8 @@ const HTML = `<!DOCTYPE html>
       };
     })();
 
-    // Play a live melody via AudioContext when play is clicked (user gesture enables audio)
-    let audioCtx, audioGain;
-    const notes = [440, 494, 523, 587, 659, 698, 784, 880];
-    function startAudio() {
-      if (audioCtx) { audioCtx.resume(); return; }
-      audioCtx = new AudioContext();
-      const osc = audioCtx.createOscillator();
-      audioGain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 440;
-      audioGain.gain.value = 0.3;
-      osc.connect(audioGain);
-      audioGain.connect(audioCtx.destination);
-      osc.start();
-      (function changeNote() {
-        if (!audioCtx) return;
-        osc.frequency.value = notes[Math.floor(audioCtx.currentTime) % notes.length];
-        setTimeout(changeNote, 500);
-      })();
-    }
-    function stopAudio() { if (audioCtx) audioCtx.suspend(); }
-    video.addEventListener('play', startAudio);
-    video.addEventListener('pause', stopAudio);
+    // Audio is provided by TTS narration (demowright captures it automatically).
+    // No in-browser audio generation needed for this demo.
   </script>
 </body></html>`;
 
