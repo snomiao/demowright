@@ -173,7 +173,7 @@ export async function applyHud(
         try {
           if (!existsSync(videoPath)) continue;
           execSync(
-            `ffmpeg -y -ss ${trimSec} -i "${videoPath}" -i "${audioPath}" -c:v libx264 -preset fast -c:a aac -shortest "${mp4Path}"`,
+            `ffmpeg -y -ss ${trimSec} -i "${videoPath}" -i "${audioPath}" -c:v libx264 -preset fast -crf 28 -c:a aac -b:a 64k -shortest "${mp4Path}"`,
             { stdio: "pipe" },
           );
           muxed = true;
@@ -185,7 +185,7 @@ export async function applyHud(
       }
       if (!muxed) {
         console.log(`[demowright] Audio saved: ${audioPath}`);
-        console.log(`[demowright] Mux: ffmpeg -y -ss ${trimSec} -i <video.webm> -i "${audioPath}" -c:v libx264 -preset fast -c:a aac -shortest "${mp4Path}"`);
+        console.log(`[demowright] Mux: ffmpeg -y -ss ${trimSec} -i <video.webm> -i "${audioPath}" -c:v libx264 -preset fast -crf 28 -c:a aac -b:a 64k -shortest "${mp4Path}"`);
       }
     });
   }
@@ -564,7 +564,7 @@ function finalizeRenderJob(
         `-i "${job.wavPath}"`,
         chapterArgs,
         vf,
-        `-c:v libx264 -preset fast`,
+        `-c:v libx264 -preset fast -crf 28`,
         `-c:a aac`,
         `-shortest`,
         `"${job.mp4Path}"`,

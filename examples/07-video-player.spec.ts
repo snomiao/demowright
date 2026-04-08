@@ -187,33 +187,26 @@ const HTML = `<!DOCTYPE html>
     })();
 
     // Play a live melody via AudioContext when play is clicked (user gesture enables audio)
-    let audioCtx, audioOsc;
+    let audioCtx, audioGain;
     const notes = [440, 494, 523, 587, 659, 698, 784, 880];
     function startAudio() {
-      if (audioCtx) return;
+      if (audioCtx) { audioCtx.resume(); return; }
       audioCtx = new AudioContext();
-      audioCtx.resume();
-      audioOsc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      audioOsc.type = 'sine';
-      audioOsc.frequency.value = 440;
-      gain.gain.value = 0.3;
-      audioOsc.connect(gain);
-      gain.connect(audioCtx.destination);
-      audioOsc.start();
-      // Change notes over time
+      const osc = audioCtx.createOscillator();
+      audioGain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 440;
+      audioGain.gain.value = 0.3;
+      osc.connect(audioGain);
+      audioGain.connect(audioCtx.destination);
+      osc.start();
       (function changeNote() {
         if (!audioCtx) return;
-        const t = audioCtx.currentTime;
-        audioOsc.frequency.value = notes[Math.floor(t) % notes.length];
+        osc.frequency.value = notes[Math.floor(audioCtx.currentTime) % notes.length];
         setTimeout(changeNote, 500);
       })();
     }
-    function stopAudio() {
-      if (audioOsc) { try { audioOsc.stop(); } catch {} audioOsc = null; }
-      if (audioCtx) { audioCtx.close(); audioCtx = null; }
-    }
-    // Hook into play/pause
+    function stopAudio() { if (audioCtx) audioCtx.suspend(); }
     video.addEventListener('play', startAudio);
     video.addEventListener('pause', stopAudio);
   </script>
