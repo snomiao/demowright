@@ -58,6 +58,8 @@ function audioCaptureMain() {
     origConnect.call(gain, processor);
     origConnect.call(processor, dest);
     interceptors.set(dest, gain);
+    // Ensure the context is running so ScriptProcessorNode fires
+    if (ctx.state === "suspended") (ctx as AudioContext).resume?.();
     return gain;
   }
 
@@ -94,6 +96,8 @@ function audioCaptureMain() {
         const ctx = new AudioContext();
         const source = ctx.createMediaElementSource(this);
         source.connect(ctx.destination); // will be intercepted by our patch
+        // Ensure context is running (may be suspended in headless/autoplay-blocked)
+        if (ctx.state === "suspended") ctx.resume();
       } catch {
         // CORS or already connected — ignore
       }

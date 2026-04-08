@@ -10,14 +10,26 @@ export class AudioWriter {
   private chunks: Float32Array[] = [];
   private sampleRate = 44100;
   private channels = 2;
+  private startMs = 0;
 
   /**
    * Called from the browser via page.exposeFunction.
    * Receives interleaved stereo float32 samples.
    */
   addChunk(samples: number[], sampleRate: number): void {
+    if (this.chunks.length === 0) this.startMs = Date.now();
     this.sampleRate = sampleRate;
     this.chunks.push(new Float32Array(samples));
+  }
+
+  /** Wall-clock time when first chunk arrived */
+  get captureStartMs(): number {
+    return this.startMs;
+  }
+
+  /** Sample rate of captured audio */
+  get rate(): number {
+    return this.sampleRate;
   }
 
   /** Total samples collected (interleaved, so / channels for per-channel) */
@@ -68,6 +80,21 @@ export class AudioWriter {
     Buffer.from(int16.buffer).copy(buffer, 44);
 
     writeFileSync(filePath, buffer);
+  }
+
+  /**
+   * Return all chunks concatenated as interleaved stereo float32.
+   */
+  toFloat32(): Float32Array {
+    const total = this.totalSamples;
+    if (total === 0) return new Float32Array(0);
+    const out = new Float32Array(total);
+    let off = 0;
+    for (const chunk of this.chunks) {
+      out.set(chunk, off);
+      off += chunk.length;
+    }
+    return out;
   }
 
   /** Reset for reuse */

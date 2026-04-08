@@ -9,8 +9,7 @@
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { applyHud } from "../src/setup.js";
-import { clickEl, moveToEl, moveTo, hudWait, annotate, narrate } from "../src/helpers.js";
+import { clickEl, moveToEl, moveTo, hudWait, annotate } from "../src/helpers.js";
 
 const HTML = `<!DOCTYPE html>
 <html><head><title>07 Video Player</title><style>
@@ -142,73 +141,39 @@ const HTML = `<!DOCTYPE html>
     // Show overlay initially
     overlay.classList.add('show');
 
-    // Generate a synthetic video with audio (no external URLs needed)
+    // Generate a synthetic video with canvas animation (video-only, no AudioContext).
+    // Audio is played live via AudioContext when the user clicks play (respects autoplay policy).
     (async function generateVideo() {
       const canvas = document.getElementById('gen-canvas');
       const ctx2d = canvas.getContext('2d');
-      const audioCtx = new AudioContext();
-      const dest = audioCtx.createMediaStreamDestination();
-
-      // Create a simple melody oscillator
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 440;
-      gain.gain.value = 0.3;
-      osc.connect(gain);
-      gain.connect(dest);
-      // Also connect to real destination so it plays audibly
-      gain.connect(audioCtx.destination);
-
-      // Combine canvas stream + audio stream
       const canvasStream = canvas.captureStream(30);
-      const combined = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...dest.stream.getAudioTracks(),
-      ]);
 
-      const recorder = new MediaRecorder(combined, { mimeType: 'video/webm;codecs=vp8,opus' });
+      const recorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp8' });
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
-      // Animate canvas for 8 seconds
-      osc.start();
       recorder.start();
       const startTime = Date.now();
-      const notes = [440, 494, 523, 587, 659, 698, 784, 880];
 
       function drawFrame() {
         const t = (Date.now() - startTime) / 1000;
-        if (t > 8) {
-          recorder.stop();
-          osc.stop();
-          return;
-        }
-        // Background gradient
+        if (t > 8) { recorder.stop(); return; }
         const grad = ctx2d.createLinearGradient(0, 0, 640, 360);
         grad.addColorStop(0, 'hsl(' + (t * 30 % 360) + ', 70%, 20%)');
         grad.addColorStop(1, 'hsl(' + ((t * 30 + 120) % 360) + ', 70%, 30%)');
         ctx2d.fillStyle = grad;
         ctx2d.fillRect(0, 0, 640, 360);
-
-        // Bouncing circle
         const cx = 320 + Math.sin(t * 2) * 200;
         const cy = 180 + Math.cos(t * 3) * 100;
         ctx2d.beginPath();
         ctx2d.arc(cx, cy, 30, 0, Math.PI * 2);
         ctx2d.fillStyle = 'hsl(' + (t * 60 % 360) + ', 80%, 60%)';
         ctx2d.fill();
-
-        // Time label
         ctx2d.fillStyle = '#fff';
         ctx2d.font = '24px system-ui';
-        ctx2d.fillText('♫ Generated Audio + Video', 160, 40);
+        ctx2d.fillText('♫ Generated Video', 200, 40);
         ctx2d.font = '18px monospace';
         ctx2d.fillText(t.toFixed(1) + 's / 8.0s', 270, 340);
-
-        // Change note
-        osc.frequency.value = notes[Math.floor(t) % notes.length];
-
         requestAnimationFrame(drawFrame);
       }
       drawFrame();
@@ -220,6 +185,37 @@ const HTML = `<!DOCTYPE html>
         window.__videoReady = true;
       };
     })();
+
+    // Play a live melody via AudioContext when play is clicked (user gesture enables audio)
+    let audioCtx, audioOsc;
+    const notes = [440, 494, 523, 587, 659, 698, 784, 880];
+    function startAudio() {
+      if (audioCtx) return;
+      audioCtx = new AudioContext();
+      audioCtx.resume();
+      audioOsc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      audioOsc.type = 'sine';
+      audioOsc.frequency.value = 440;
+      gain.gain.value = 0.3;
+      audioOsc.connect(gain);
+      gain.connect(audioCtx.destination);
+      audioOsc.start();
+      // Change notes over time
+      (function changeNote() {
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime;
+        audioOsc.frequency.value = notes[Math.floor(t) % notes.length];
+        setTimeout(changeNote, 500);
+      })();
+    }
+    function stopAudio() {
+      if (audioOsc) { try { audioOsc.stop(); } catch {} audioOsc = null; }
+      if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    }
+    // Hook into play/pause
+    video.addEventListener('play', startAudio);
+    video.addEventListener('pause', stopAudio);
   </script>
 </body></html>`;
 
@@ -236,15 +232,10 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("video player — play, pause, seek, media keys, audio capture", async ({ browser }) => {
-  // Create a fresh context with video + audio capture + TTS
+  // register.cjs already calls applyHud with audio:true (from QA_HUD_AUDIO env var)
   const context = await browser.newContext({
     recordVideo: { dir: "tmp/", size: { width: 1280, height: 720 } },
     viewport: { width: 1280, height: 720 },
-  });
-  // register.cjs already called applyHud, but without audio. Call again with audio enabled.
-  await applyHud(context, {
-    actionDelay: 300,
-    audio: true,
   });
 
   const page = await context.newPage();
@@ -256,19 +247,16 @@ test("video player — play, pause, seek, media keys, audio capture", async ({ b
   // 1. Introduction
   await annotate(page, "Let's explore this video player");
 
-  // 2. Click play
+  // Play the video — audio starts via AudioContext on play event
   await annotate(page, "Playing the video", async () => {
     await clickEl(page, "#big-play");
-    await hudWait(page, 3000); // let video play with audio for a few seconds
+    await hudWait(page, 3000); // let video play with audio
   });
 
-  // 3. Pause
-  await annotate(page, "Pausing the video", async () => {
+  // Pause and seek
+  await annotate(page, "Pausing and seeking to the middle", async () => {
     await clickEl(page, "#btn-play");
-  });
-
-  // 4. Seek via progress bar — click at ~60% position
-  await annotate(page, "Seeking to the middle of the video", async () => {
+    await hudWait(page, 500);
     const bar = await page.evaluate(() => {
       const el = document.getElementById("progress-bar")!;
       const r = el.getBoundingClientRect();
@@ -279,79 +267,44 @@ test("video player — play, pause, seek, media keys, audio capture", async ({ b
     await page.click("#progress-bar", { position: { x: bar.w * 0.6, y: 3 } });
   });
 
-  // 5. Resume playback
-  await annotate(page, "Resuming playback", async () => {
+  // Resume and use keyboard shortcuts
+  await annotate(page, "Resuming with keyboard shortcuts", async () => {
     await clickEl(page, "#btn-play");
-    await hudWait(page, 2000); // let it play a bit more
-  });
-
-  // 6. Keyboard shortcuts
-  await annotate(page, "Using keyboard shortcuts");
-
-  // Space to pause
-  await annotate(page, "Space to pause", async () => {
-    await page.keyboard.press("Space");
-  });
-
-  // Arrow right/left to seek
-  await annotate(page, "Arrow keys to seek", async () => {
-    await page.keyboard.press("ArrowRight");
+    await hudWait(page, 2000);
+    await page.keyboard.press("Space"); // pause
     await hudWait(page, 500);
     await page.keyboard.press("ArrowRight");
-    await hudWait(page, 500);
+    await hudWait(page, 300);
     await page.keyboard.press("ArrowLeft");
+    await hudWait(page, 300);
+    await page.keyboard.press("ArrowUp"); // volume up
+    await hudWait(page, 300);
+    await page.keyboard.press("ArrowDown"); // volume down
   });
 
-  // Volume up/down
-  await annotate(page, "Arrow up/down for volume", async () => {
-    await page.keyboard.press("ArrowUp");
-    await hudWait(page, 400);
-    await page.keyboard.press("ArrowDown");
-    await hudWait(page, 400);
-    await page.keyboard.press("ArrowDown");
-  });
-
-  // M to mute
-  await annotate(page, "M to mute", async () => {
-    await page.keyboard.press("m");
-    await hudWait(page, 600);
-    await page.keyboard.press("m"); // Unmute
-  });
-
-  // Space to resume
-  await annotate(page, "Space to resume", async () => {
-    await page.keyboard.press("Space");
+  // Mute, unmute, and resume
+  await annotate(page, "Testing mute and skip controls", async () => {
+    await page.keyboard.press("m"); // mute
+    await hudWait(page, 500);
+    await page.keyboard.press("m"); // unmute
+    await hudWait(page, 500);
+    await page.keyboard.press("Space"); // resume
     await hudWait(page, 2000); // play with audio
-  });
-
-  // 7. Click skip buttons
-  await annotate(page, "Using skip controls", async () => {
     await clickEl(page, "#btn-prev");
     await hudWait(page, 500);
     await clickEl(page, "#btn-next");
   });
 
-  // 8. Adjust volume slider
-  await annotate(page, "Adjusting volume", async () => {
+  // Volume slider and finish
+  await annotate(page, "That's our video player demo!", async () => {
     await moveToEl(page, "#volume");
-    await hudWait(page, 300);
     await page.fill("#volume", "30");
     await page.evaluate(() => {
       const v = document.getElementById("volume") as HTMLInputElement;
       v.dispatchEvent(new Event("input", { bubbles: true }));
     });
-  });
-
-  // 9. Mute button
-  await annotate(page, "Mute toggle", async () => {
-    await clickEl(page, "#btn-mute");
     await hudWait(page, 500);
-    await clickEl(page, "#btn-mute");
-  });
-
-  // 10. Pause to finish
-  await annotate(page, "That's our video player demo!", async () => {
-    await page.keyboard.press("Space");
+    await page.keyboard.press("Space"); // pause
   });
 
   // Verify video state

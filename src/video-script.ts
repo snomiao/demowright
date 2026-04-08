@@ -23,7 +23,7 @@
  * // result.mp4Path, result.srtPath, result.timeline
  * ```
  */
-import { writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { isHudActive, getTtsProvider, getGlobalTtsProvider, getGlobalOutputDir, storeAudioSegment, storeRenderJob } from "./hud-registry.js";
@@ -566,6 +566,8 @@ class VideoScriptImpl {
 
     mkdirSync(outputDir, { recursive: true });
     mkdirSync(tmpDir, { recursive: true });
+    const gitignorePath = join(outputDir, ".gitignore");
+    if (!existsSync(gitignorePath)) writeFileSync(gitignorePath, "*\n");
 
     const wavPath = join(tmpDir, `${baseName}.wav`);
     const srtPath = join(tmpDir, `${baseName}.srt`);
