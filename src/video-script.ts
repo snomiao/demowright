@@ -85,6 +85,9 @@ interface TitleStep {
   kind: "title";
   text: string;
   subtitle?: string;
+  /** Optional TTS narration read aloud over the card. When set, card
+   *  duration becomes max(durationMs, narration audio length). */
+  narration?: string;
   durationMs: number;
   background?: string;
 }
@@ -105,6 +108,9 @@ interface OutroStep {
   kind: "outro";
   text: string;
   subtitle?: string;
+  /** Optional TTS narration read aloud over the card. When set, card
+   *  duration becomes max(durationMs, narration audio length). */
+  narration?: string;
   durationMs: number;
   background?: string;
 }
@@ -140,6 +146,8 @@ export interface VideoScriptResult {
 
 export interface TitleOptions {
   subtitle?: string;
+  /** TTS narration read aloud over the card overlay. Duration auto-extends to fit. */
+  narration?: string;
   durationMs?: number;
   /** CSS background — default: radial gradient */
   background?: string;
@@ -148,6 +156,8 @@ export interface TitleOptions {
 export interface OutroOptions {
   text?: string;
   subtitle?: string;
+  /** TTS narration read aloud over the card overlay. Duration auto-extends to fit. */
+  narration?: string;
   durationMs?: number;
   background?: string;
 }
@@ -441,13 +451,14 @@ class VideoScriptImpl {
 
   /**
    * Add a title card — full-screen overlay with text + optional subtitle.
-   * No TTS narration by default (silent title card).
+   * Pass `narration` in opts to have TTS voiceover during the card.
    */
   title(text: string, opts?: TitleOptions): this {
     this.steps.push({
       kind: "title",
       text,
       subtitle: opts?.subtitle,
+      narration: opts?.narration,
       durationMs: opts?.durationMs ?? 4000,
       background: opts?.background,
     });
@@ -482,12 +493,14 @@ class VideoScriptImpl {
 
   /**
    * Add an outro card — full-screen overlay, similar to title.
+   * Pass `narration` in opts to have TTS voiceover during the card.
    */
   outro(opts?: OutroOptions): this {
     this.steps.push({
       kind: "outro",
       text: opts?.text ?? "Thanks for watching!",
       subtitle: opts?.subtitle,
+      narration: opts?.narration,
       durationMs: opts?.durationMs ?? 4000,
       background: opts?.background,
     });
@@ -509,12 +522,20 @@ class VideoScriptImpl {
     }
     if (!provider) return;
 
-    const segmentSteps = this.steps
-      .filter((s): s is SegmentStep => s.kind === "segment")
-      .map((s, i) => ({ ...s, id: `step-${i}` }));
+    // Collect all steps that need TTS: segments + title/outro with narration
+    const ttsSteps: { id: string; text: string }[] = [];
+    let segIdx2 = 0;
+    for (let i = 0; i < this.steps.length; i++) {
+      const s = this.steps[i];
+      if (s.kind === "segment") {
+        ttsSteps.push({ id: `step-${segIdx2++}`, text: s.text });
+      } else if ((s.kind === "title" || s.kind === "outro") && s.narration) {
+        ttsSteps.push({ id: `card-${i}`, text: s.narration });
+      }
+    }
 
     const results = await Promise.allSettled(
-      segmentSteps.map(async (step) => {
+      ttsSteps.map(async (step) => {
         const cached = VideoScriptImpl.ttsCache.get(step.text);
         if (cached) return { id: step.id, ...cached };
         const wavBuf = await fetchTtsAudio(step.text, provider as TtsProviderType);
@@ -528,7 +549,7 @@ class VideoScriptImpl {
       if (r.status === "fulfilled") {
         const seg = { wavBuf: r.value.wavBuf, durationMs: r.value.durationMs };
         this.prepared.set(r.value.id, seg);
-        const step = segmentSteps[idx];
+        const step = ttsSteps[idx];
         if (step) VideoScriptImpl.ttsCache.set(step.text, seg);
       }
       idx++;
@@ -648,17 +669,30 @@ class VideoScriptImpl {
 
       if (step.kind === "title" || step.kind === "outro") {
         const bg = step.background ?? DEFAULT_BG;
+        // Check for narrated card (TTS over the overlay)
+        const cardTts = step.narration ? this.prepared.get(`card-${i}`) : undefined;
+        const effectiveDuration = cardTts
+          ? Math.max(step.durationMs, cardTts.durationMs + 500) // pad 500ms after narration
+          : step.durationMs;
+
         if (active) {
-          showCard(page, step.text, step.subtitle, step.durationMs, bg).catch(() => {});
+          showCard(page, step.text, step.subtitle, effectiveDuration, bg).catch(() => {});
         }
-        await page.waitForTimeout(step.durationMs);
+        // Play narration audio over the card if present
+        if (active && cardTts) {
+          const offsetMs = Date.now() - planStartMs;
+          audioSegments.push({ offsetMs, wavBuf: cardTts.wavBuf });
+          storeAudioSegment(page, { timestampMs: Date.now(), wavBuf: cardTts.wavBuf });
+          showCaption(page, step.narration!, cardTts.durationMs).catch(() => {});
+        }
+        await page.waitForTimeout(effectiveDuration);
 
         timeline.push({
           id: stepIds[i],
           kind: step.kind,
-          text: step.text,
+          text: step.narration ?? step.text,
           startMs: stepStartMs - planStartMs,
-          durationMs: step.durationMs,
+          durationMs: effectiveDuration,
           actionMs: 0,
           overrunMs: 0,
         });
