@@ -1,74 +1,170 @@
 ---
 name: record-demo-video
-description: Record a fully automated, narration-driven CLI demo video using Docker, Xvfb, Gemini TTS, and ffmpeg 2-pass post-mix. Use this skill when you need to produce a polished MP4 demo video for a CLI tool — with synchronized voice narration, burned-in subtitles, and an AI-generated thumbnail. The output is reproducible: anyone can docker run and get the same video.
+description: Record a polished demo video using demowright's Playwright-based HUD overlay, TTS narration (Gemini/espeak-ng), and ffmpeg post-mix. Use this skill when producing an MP4 demo video with synchronized voice narration, subtitles, and optional AI-generated thumbnails. No Docker or Xvfb needed — demowright handles recording, TTS capture, and audio mux natively.
 ---
 
-# record-demo-video — Automated CLI Demo Video Production
+# record-demo-video — Demowright Demo Video Production
 
-Produce a polished MP4 demo video for a CLI tool using a 2-pass pipeline:
-1. **Pass 1**: Record a silent screen capture inside Docker (Xvfb → ffmpeg)
-2. **Pass 2**: Pre-generate TTS narration with Gemini, overlay it in post, burn subtitles
+Produce a polished MP4 demo video using demowright's Playwright-based pipeline:
+1. **Narration-driven script** using `createVideoScript()` or `narrate()` helpers
+2. **TTS narration** via Gemini, OpenAI, or espeak-ng (auto-captured by demowright)
+3. **Automatic mux** — video + audio + subtitles handled by demowright's setup.ts
 
-The demo script is **narration-driven**: every section waits exactly as long as its TTS audio clip, so audio and video stay in sync without any runtime audio playback.
+No Docker, Xvfb, or manual ffmpeg needed — demowright handles everything inside Playwright.
+
+## Prerequisites
+
+- **demowright** installed (`npm install demowright` or use this repo directly)
+- **Playwright** with Firefox (for video recording)
+- **(Optional) TTS API key** — for high-quality narration:
+
+  | Provider | Model | Setup |
+  |---|---|---|
+  | **espeak-ng** (default, free) | Local synthesis | `apt install espeak-ng` |
+  | **Gemini TTS** (recommended) | `gemini-2.5-flash-preview-tts` | `GOOGLE_GENERATIVE_AI_API_KEY` in `.env.local` |
+  | **OpenAI TTS** | `gpt-4o-mini-tts` | `OPENAI_API_KEY` in `.env.local` |
+  | **ElevenLabs** | Eleven v3 | `ELEVENLABS_API_KEY` in `.env.local` |
+
+  See [`MODEL_REFERENCES.md`](./MODEL_REFERENCES.md) for a fuller comparison.
 
 ## Pipeline Overview
 
 ```
-generate-narration.py  ──►  narration_track.wav + durations.sh + meta.json
-         │
-         ▼
-docker build  (bakes durations.sh into image)
-         │
-         ▼
-docker run  ──►  Xvfb :99 → ffmpeg x11grab → screen-recording.mp4
-                 demo.sh (narration-driven, launches xterm + Chrome)
-                 record.sh post-mix:
-                   adelay = demo_start_ms − ffmpeg_start_ms
-                   ffmpeg overlay narration_track.wav
-                   burn subtitles from meta.json
-         │
-         ▼
-screen-recording-final.mp4  (video + audio + subtitles)
-         │  (optional)
-         ▼
-ffmpeg concat thumbnail.jpg → final-with-intro.mp4
+Playwright test (.spec.ts)
+  ├── createVideoScript() or narrate()/annotate() helpers
+  │     ├── TTS provider generates audio per segment
+  │     ├── Audio played in browser via AudioContext
+  │     └── PulseAudio pipe-sink captures all audio
+  │
+  ├── Playwright recordVideo captures screen
+  │
+  └── context.close() triggers:
+        ├── WAV audio track assembly (setup.ts)
+        ├── SRT subtitle generation
+        ├── ffmpeg mux: video + audio + subtitles → .mp4
+        └── Output: .demowright/<test-name>.mp4
 ```
 
----
+## Approach 1: Video Script (recommended for multi-segment demos)
 
-## Step 1 — Write the Narration Script
+```typescript
+import { test } from "@playwright/test";
+import { applyHud } from "demowright";
+import { createVideoScript } from "demowright/helpers";
 
-Create `SEGMENTS` in `generate-narration.py` **before** writing the demo script.
-Each segment should cover one visual action (5–10 seconds is ideal):
+test("my demo", async ({ browser }) => {
+  const context = await browser.newContext({
+    recordVideo: { dir: "tmp/", size: { width: 1280, height: 720 } },
+    viewport: { width: 1280, height: 720 },
+  });
 
-```python
-SEGMENTS = [
-    ("01_intro",   "Your tool does X — here's how."),
-    ("02_launch",  "First, we launch the app with..."),
-    ("03_connect", "The CLI connects to the browser..."),
-    # ...cover EVERY action, no silent gaps
-]
+  await applyHud(context, {
+    actionDelay: 300,
+    audio: true,
+    tts: "https://...tts-endpoint?text={{text}}", // or espeak-ng auto-detected
+  });
+
+  const page = await context.newPage();
+  const script = createVideoScript();
+
+  script.title("My Tool Demo", { durationMs: 3000 });
+
+  script.segment("Getting Started", async () => {
+    await page.goto("https://example.com");
+    // Visual actions happen here, timed to narration
+  });
+
+  script.segment("Key Feature", async () => {
+    await page.click("#feature-btn");
+  });
+
+  script.outro("Thanks for watching!", { durationMs: 2000 });
+
+  const result = await script.render(page);
+  // result.srtContent, result.chaptersContent available
+
+  await context.close();
+  // → .demowright/my-demo.mp4 (video + audio + subtitles)
+});
 ```
 
-Rules:
-- Cover every visual section — no gaps, even page loads
-- Keep segments 5–10 seconds (shorter = less accumulated drift)
-- The narration is the script; write it before the demo actions
+## Approach 2: Simple narrate() helpers
 
----
+```typescript
+import { test } from "@playwright/test";
+import { applyHud } from "demowright";
+import { narrate, clickEl, hudWait, annotate } from "demowright/helpers";
 
-## Step 2 — Generate TTS Audio
+test("quick demo", async ({ browser }) => {
+  const context = await browser.newContext({
+    recordVideo: { dir: "tmp/", size: { width: 1280, height: 720 } },
+  });
+
+  await applyHud(context, { actionDelay: 300, audio: true });
+  const page = await context.newPage();
+
+  await narrate(page, "Welcome to our tool demo");
+  await page.goto("https://example.com");
+
+  await annotate(page, "Let's click the main button", async () => {
+    await clickEl(page, "#main-btn");
+    await hudWait(page, 1000);
+  });
+
+  await context.close();
+});
+```
+
+## TTS Provider Setup
+
+### espeak-ng (default, zero config)
+
+Works automatically if `espeak-ng` is installed. No API key needed.
+
+### Gemini TTS (best quality/convenience balance)
 
 ```bash
-# Requires GOOGLE_GENERATIVE_AI_API_KEY in .env.local (searched upward from script)
-cd docker-demo
-python3 generate-narration.py
+echo 'GOOGLE_GENERATIVE_AI_API_KEY=your-key' > .env.local
 ```
 
-Uses **Gemini TTS** (`gemini-2.5-flash-preview-tts` or newer) with concurrent generation.
+Configure in `playwright.config.ts`:
+```typescript
+export default withDemowright(defineConfig({...}), {
+  audio: true,
+  tts: async (text: string) => {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text }], role: "user" }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+          },
+        }),
+      },
+    );
+    const data = await resp.json();
+    const pcm = Buffer.from(data.candidates[0].content.parts[0].inlineData.data, "base64");
+    // Gemini returns raw PCM (24kHz, 16-bit, mono) — wrap in WAV header
+    return pcmToWav(pcm, 24000);
+  },
+});
+```
+
+### Pre-generating TTS with Python (for reproducible builds)
+
+For deterministic timing or batch generation, use the included Python script:
+
+```bash
+# Edit SEGMENTS in the script first
+python3 skills/record-demo-video/template/generate-narration.py
+```
 
 Key detail: Gemini TTS returns raw PCM (`audio/L16;codec=pcm;rate=24000`), not WAV.
-Must add WAV header with Python's `wave` module before any further processing:
+Must add WAV header before use:
 
 ```python
 def pcm_to_wav(pcm_bytes, path, rate=24000, channels=1, bits=16):
@@ -77,183 +173,79 @@ def pcm_to_wav(pcm_bytes, path, rate=24000, channels=1, bits=16):
         w.setframerate(rate);     w.writeframes(pcm_bytes)
 ```
 
-Outputs:
-- `narration/*.wav` — one file per segment (cached; re-runs skip existing)
-- `narration/narration_track.wav` — all segments concatenated in order
-- `narration/durations.sh` — `DUR_01_intro=9890` variables for demo.sh
-- `narration/meta.json` — segment text + duration for subtitle generation
-
----
-
-## Step 3 — Write the Demo Script (narration-driven timing)
-
-The core pattern: `narrate()` logs the timestamp, `narrate_end()` sleeps for whatever time remains in the current segment's audio duration.
+## Thumbnail Generation (optional)
 
 ```bash
-# In demo.sh (sourced from durations.sh first)
-narrate() {
-  local name="$1"
-  local elapsed_ms=$(( $(date +%s%3N) - DEMO_START_MS ))
-  local var="DUR_${name//-/_}"
-  __NARRATE_DUR_MS="${!var:-4000}"
-  echo "${DEMO_START_MS}|${elapsed_ms}|${__NARRATE_DUR_MS}|${2}" >> "${OUTPUT_DIR}/narration_log.txt"
-  __NARRATE_START_MS=$(date +%s%3N)
-}
-
-narrate_end() {
-  local remaining=$(( __NARRATE_DUR_MS - ($(date +%s%3N) - __NARRATE_START_MS) ))
-  [ "$remaining" -gt 50 ] && sleep "$(awk "BEGIN{printf \"%.3f\", ${remaining}/1000}")"
-}
+python3 skills/record-demo-video/template/generate-thumbnail.py
 ```
 
-Usage:
+Uses Gemini image generation by default. Edit `PROMPT` in the script.
 
+Prepend as 3-second intro frame:
 ```bash
-narrate "02_launch" "Launching the app..."
-# do visual actions here (they run concurrently with narration timing)
-show_cmd 'myapp start'
-myapp start &
-narrate_end   # sleeps for remaining DUR_02_launch ms
-```
-
-**Why this syncs**: segments are concatenated in order in `narration_track.wav`.
-The elapsed_ms at each `narrate()` call equals the cumulative duration of all previous segments.
-The post-mix applies a single `adelay = (demo_start_ms − ffmpeg_start_ms)` offset.
-So every `narrate()` call lands on the correct position in the WAV — no per-segment alignment needed.
-
----
-
-## Step 4 — Docker Recording Environment
-
-Minimal `Dockerfile` structure:
-
-```dockerfile
-FROM node:22-bookworm
-
-RUN apt-get install -y \
-    xvfb x11-utils xterm fluxbox ffmpeg xdotool \
-    chromium fonts-noto fonts-noto-color-emoji \
-    fonts-noto-cjk wget unzip
-
-# ... install your CLI tool and Chrome extension
-
-COPY demo.sh record.sh ./
-COPY narration/ ./narration/   # pre-generated TTS audio
-CMD ["bash", "record.sh"]
-```
-
-`record.sh` entrypoint sequence:
-
-```bash
-Xvfb :99 -screen 0 1280x800x24 &
-fluxbox -display :99 &
-# record FFMPEG_START_MS
-ffmpeg -f x11grab -video_size 1280x800 -framerate 30 \
-       -i :99.0 -c:v libx264 -preset ultrafast screen-recording.mp4 &
-FFMPEG_PID=$!
-
-bash demo.sh | tee demo.log
-
-kill $FFMPEG_PID && wait $FFMPEG_PID
-
-# post-mix: overlay narration_track.wav + burn subtitles
-python3 post-mix.py
-```
-
----
-
-## Step 5 — Post-Mix (runs automatically inside record.sh)
-
-```python
-# compute delay
-audio_delay_ms = demo_start_ms - ffmpeg_start_ms  # typically ~2000ms
-
-# overlay single WAV track
-ffmpeg -i video.mp4 -i narration_track.wav \
-  -filter_complex f"[1:a]adelay={d}|{d}[aout]" \
-  -map 0:v -map "[aout]" -c:v libx264 -c:a aac \
-  screen-recording-audio.mp4
-
-# generate subtitles from meta.json (deterministic)
-cursor_ms = audio_delay_ms
-for seg in meta:
-    srt_entry(cursor_ms, cursor_ms + seg['duration_ms'], seg['text'])
-    cursor_ms += seg['duration_ms']
-
-# burn subtitles
-ffmpeg -i screen-recording-audio.mp4 \
-  -vf "subtitles=subs.srt:force_style='FontSize=16,Alignment=2'" \
-  -c:a copy screen-recording-final.mp4
-```
-
----
-
-## Step 6 — Generate Thumbnail (optional)
-
-```python
-import requests, base64
-
-url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key={api_key}"
-body = {
-    "contents": [{"parts": [{"text": "YouTube tech thumbnail, 16:9, dark background..."}], "role": "user"}],
-    "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
-}
-resp = requests.post(url, json=body)
-img = base64.b64decode(resp.json()['candidates'][0]['content']['parts'][0]['inlineData']['data'])
-open('thumbnail.jpg', 'wb').write(img)
-```
-
-Prepend as 3-second static intro frame:
-
-```bash
-ffmpeg -y -loop 1 -t 3 -i thumbnail.jpg -i screen-recording-final.mp4 \
-  -filter_complex \
-    "[0:v]scale=1280:800,setsar=1[t];[1:v]scale=1280:800,setsar=1[m];
-     [t][m]concat=n=2:v=1:a=0[v];[1:a]adelay=3000|3000[a]" \
+ffmpeg -y -loop 1 -t 3 -i thumbnail.jpg -i .demowright/demo.mp4 \
+  -filter_complex "[0:v]scale=1280:720,setsar=1[t];[1:v][t]concat=n=2:v=1:a=0[v];[1:a]adelay=3000|3000[a]" \
   -map "[v]" -map "[a]" -c:v libx264 -c:a aac final.mp4
 ```
 
----
+## YouTube Upload (optional)
+
+```bash
+python3 skills/record-demo-video/template/youtube_upload.py .demowright/demo.mp4
+```
+
+Requires `client_secret.json` from Google Cloud Console (OAuth Desktop client, YouTube Data API v3).
+
+## Demowright vs Docker Pipeline
+
+| Aspect | Demowright (this project) | Docker/Xvfb (template/) |
+|---|---|---|
+| Recording | Playwright `recordVideo` | Xvfb + ffmpeg x11grab |
+| Audio capture | PulseAudio pipe-sink (automatic) | Post-mix only (no live audio) |
+| TTS timing | `narrate()` / `pace()` auto-syncs | `narrate()`/`narrate_end()` bash helpers |
+| Subtitles | Auto-generated SRT via `createVideoScript()` | Post-mix from meta.json |
+| Mux | Automatic on `context.close()` | Manual ffmpeg in record.sh |
+| HUD overlay | Cursor, key badges, click ripples | None (raw screen capture) |
+| Setup | `bun i` + Playwright | Docker build + Xvfb + fluxbox |
+| Best for | **Web app demos** | **CLI tool demos** |
+
+## Quick Reference
+
+```bash
+# 1. Write your test with narrate()/createVideoScript()
+# 2. Run the test
+bunx playwright test examples/09-video-script.spec.ts --config examples/playwright.config.ts
+
+# 3. Output: .demowright/<test-name>.mp4
+
+# 4. (Optional) Generate thumbnail
+python3 skills/record-demo-video/template/generate-thumbnail.py
+
+# 5. (Optional) Upload to YouTube
+python3 skills/record-demo-video/template/youtube_upload.py .demowright/demo.mp4
+```
+
+## Template Files (for Docker/CLI demos)
+
+The `template/` directory contains the Docker-based pipeline from playwright-multi-tab,
+useful as a reference or for recording CLI tools that don't run in a browser:
+
+| File | Purpose | Edit per project? |
+|---|---|---|
+| `generate-narration.py` | Gemini TTS → wav segments + `durations.sh` + `meta.json` | **Yes** — edit `SEGMENTS` |
+| `demo.sh` | Narration-driven CLI demo script | **Yes** — edit visual actions |
+| `record.sh` | Xvfb + ffmpeg recorder + post-mix | Rarely |
+| `Dockerfile` | Recording environment | **Yes** — install your tool |
+| `generate-thumbnail.py` | Gemini image gen → `thumbnail.jpg` | **Yes** — edit `PROMPT` |
+| `youtube_upload.py` | OAuth + resumable upload to YouTube | Rarely |
 
 ## Common Pitfalls
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| All audio segments play simultaneously | `paplay seg.wav &` during recording | Use 2-pass post-mix; no live audio |
-| Silent gap in middle of video | Not enough narration segments | Add segments for every visual action including page loads |
-| Wrong tab closed by ctrl+w | Tab focus state is unpredictable with xdotool | Use CLI commands (`tab-select N`) instead of keyboard shortcuts for tab navigation |
-| `ERR_BLOCKED_BY_CLIENT` for extension URL | Chrome blocks `chrome-extension://` as startup arg | Pre-launch Chrome with `about:blank`, then open extension tab from within |
-| Raw PCM sounds like noise | Gemini TTS returns PCM, not WAV | Add WAV header with `wave` module before saving/using |
-| 1–2s drift by end of video | Bash process overhead ~10–50ms/segment | Acceptable for demos; for frame-accurate sync use a visual sync pulse |
-| MV2 extension fails to load | Chromium 146+ dropped MV2 support | Switch to MV3 equivalents (uBOL for uBlock, ISDCAC for userscripts) |
-
----
-
-## Quick Reference: Full Command Sequence
-
-```bash
-# 1. Write narration in generate-narration.py, then:
-python3 generate-narration.py
-
-# 2. Write demo.sh using narrate()/narrate_end() pattern
-
-# 3. Build and record
-docker build -t demo:latest .
-mkdir -p output
-docker run --rm -v "$(pwd)/output:/output" demo:latest
-
-# 4. View result
-open output/screen-recording-final.mp4
-
-# 5. Optional: add thumbnail intro
-python3 generate-thumbnail.py
-ffmpeg [concat command above] output/final.mp4
-```
-
-## Reference Implementation
-
-See `docker-demo/` in this repo for a complete working example covering:
-- Chrome extension relay connection
-- Multi-tab navigation
-- Independent browser sessions
-- ~161 seconds, 20 narration segments, 2:44 final video
+| Problem | Fix |
+|---|---|
+| No audio in output | Ensure `audio: true` in config and PulseAudio is running |
+| TTS sounds robotic | Switch from espeak-ng to Gemini or ElevenLabs |
+| Narration out of sync | Use `createVideoScript()` with `pace()` for precise timing |
+| Raw PCM sounds like noise | Gemini returns PCM, not WAV — add WAV header |
+| Video too long | Reduce `actionDelay`, use shorter `hudWait()` values |
+| Firefox-only recording | Playwright video recording works best with Firefox |

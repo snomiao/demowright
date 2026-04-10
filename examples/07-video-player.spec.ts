@@ -8,8 +8,21 @@
  * The resulting WAV file contains both the narrator and the video audio mixed.
  */
 import http from "node:http";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { test, expect } from "@playwright/test";
 import { clickEl, moveToEl, moveTo, hudWait, annotate } from "../src/helpers.js";
+
+// Generate TTS narration for the embedded video at import time
+const ttsText = "This is a demo video with generated narration. Watch the colorful animation as it moves across the screen.";
+let ttsBase64 = "";
+try {
+  const wavBuf = execSync(
+    `espeak-ng --stdout -s 130 -p 40 ${JSON.stringify(ttsText)}`,
+    { stdio: ["pipe", "pipe", "pipe"], maxBuffer: 4 * 1024 * 1024 },
+  );
+  ttsBase64 = wavBuf.toString("base64");
+} catch { /* espeak-ng not available, video will be silent */ }
 
 const HTML = `<!DOCTYPE html>
 <html><head><title>07 Video Player</title><style>
@@ -141,14 +154,38 @@ const HTML = `<!DOCTYPE html>
     // Show overlay initially
     overlay.classList.add('show');
 
-    // Generate a synthetic video with canvas animation (video-only, no AudioContext).
-    // Audio is played live via AudioContext when the user clicks play (respects autoplay policy).
+    // Generate a synthetic video with canvas animation + TTS audio.
+    // TTS WAV is injected as base64 by the test runner (espeak-ng).
     (async function generateVideo() {
       const canvas = document.getElementById('gen-canvas');
       const ctx2d = canvas.getContext('2d');
       const canvasStream = canvas.captureStream(30);
 
-      const recorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp8' });
+      // Decode TTS audio and create an audio stream for MediaRecorder
+      const ttsB64 = window.__ttsBase64 || '';
+      let combinedStream = canvasStream;
+
+      if (ttsB64) {
+        try {
+          const audioCtx = new AudioContext();
+          const rawBytes = Uint8Array.from(atob(ttsB64), c => c.charCodeAt(0));
+          const audioBuffer = await audioCtx.decodeAudioData(rawBytes.buffer);
+          const dest = audioCtx.createMediaStreamDestination();
+          const source = audioCtx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(dest);
+          source.start();
+          // Combine canvas video + audio into one stream
+          combinedStream = new MediaStream([
+            ...canvasStream.getVideoTracks(),
+            ...dest.stream.getAudioTracks(),
+          ]);
+        } catch (e) {
+          console.warn('TTS audio decode failed, video will be silent:', e);
+        }
+      }
+
+      const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp8,opus' });
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
@@ -178,25 +215,33 @@ const HTML = `<!DOCTYPE html>
       }
       drawFrame();
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'video/webm' });
         video.src = URL.createObjectURL(blob);
         video.load();
+        // Store base64 for extraction
+        const buf = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        window.__videoBase64 = btoa(binary);
         window.__videoReady = true;
       };
     })();
-
-    // Audio is provided by TTS narration (demowright captures it automatically).
-    // No in-browser audio generation needed for this demo.
   </script>
 </body></html>`;
 
 let server: http.Server;
 let baseUrl: string;
 test.beforeAll(async () => {
+  // Inject TTS base64 into the HTML so the browser can decode and mix it into the video
+  const injectedHTML = HTML.replace(
+    '<script>',
+    `<script>window.__ttsBase64 = "${ttsBase64}";`,
+  );
   server = http.createServer((_, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(HTML);
+    res.end(injectedHTML);
   });
   await new Promise<void>((r) => server.listen(0, r));
   baseUrl = `http://localhost:${(server.address() as any).port}`;
@@ -282,6 +327,13 @@ test("video player — play, pause, seek, media keys, audio capture", async ({ b
   // Verify video state
   const paused = await page.evaluate(() => (document.getElementById("video") as HTMLVideoElement).paused);
   expect(paused).toBe(true);
+
+  // Extract the embedded generated video to a file
+  const videoBase64 = await page.evaluate(() => (window as any).__videoBase64 as string);
+  if (videoBase64) {
+    mkdirSync(".demowright", { recursive: true });
+    writeFileSync(".demowright/07-embedded-video.webm", Buffer.from(videoBase64, "base64"));
+  }
 
   // Close context to trigger WAV save + ffmpeg mux (webm → mp4 with audio)
   await context.close();
