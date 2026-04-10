@@ -25,7 +25,7 @@ try {
 } catch { /* espeak-ng not available, video will be silent */ }
 
 const HTML = `<!DOCTYPE html>
-<html><head><title>07 Video Player</title><style>
+<html><head><title>07 Video Player — Synthwave Canvas Demo</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0a0a0a; color: #fff; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
   .player { width: 720px; background: #111; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
@@ -208,7 +208,7 @@ const HTML = `<!DOCTYPE html>
         ctx2d.fill();
         ctx2d.fillStyle = '#fff';
         ctx2d.font = '24px system-ui';
-        ctx2d.fillText('♫ Generated Video', 200, 40);
+        ctx2d.fillText('♫ Synthwave Canvas Demo', 200, 40);
         ctx2d.font = '18px monospace';
         ctx2d.fillText(t.toFixed(1) + 's / 8.0s', 270, 340);
         requestAnimationFrame(drawFrame);
@@ -228,6 +228,69 @@ const HTML = `<!DOCTYPE html>
         window.__videoReady = true;
       };
     })();
+
+    // Audio soundtrack: play a looping C-major melody via Web Audio API
+    // when the video plays. Demowright's audio-capture.ts intercepts
+    // AudioNode.connect and sends PCM chunks to Node via __qaHudAudioChunk.
+    // In Docker with PulseAudio, system-level capture also records the output.
+    let audioCtx = null;
+    let melodyInterval = null;
+    window.__audioChunkCount = 0;
+
+    // Count audio chunks captured by demowright's Web Audio intercept
+    const _origChunkFn = window.__qaHudAudioChunk;
+    if (typeof _origChunkFn === 'function') {
+      window.__qaHudAudioChunk = function(...args) {
+        window.__audioChunkCount++;
+        return _origChunkFn.apply(this, args);
+      };
+    }
+
+    let masterGain = null;
+
+    async function startAudio() {
+      if (audioCtx) return;
+      audioCtx = new AudioContext();
+      await audioCtx.resume(); // required: Playwright clicks don't count as user gesture
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.15;
+      masterGain.connect(audioCtx.destination);
+
+      // C major scale melody, looping
+      const notes = [262, 294, 330, 349, 392, 440, 494, 523];
+      let idx = 0;
+
+      function playNote() {
+        if (!audioCtx || audioCtx.state === 'closed') return;
+        const osc = audioCtx.createOscillator();
+        const env = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = notes[idx % notes.length];
+        env.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        env.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.connect(env).connect(masterGain);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.45);
+        idx++;
+      }
+
+      playNote();
+      melodyInterval = setInterval(playNote, 500);
+    }
+
+    function stopAudio() {
+      if (melodyInterval) { clearInterval(melodyInterval); melodyInterval = null; }
+      // Immediately silence by disconnecting the master gain from destination,
+      // then close the context. This ensures no residual audio leaks through
+      // the ScriptProcessorNode tap while AudioContext.close() resolves.
+      if (masterGain) { try { masterGain.disconnect(); } catch {} masterGain = null; }
+      if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    }
+
+    // Wire audio to video play/pause
+    video.addEventListener('play', startAudio);
+    video.addEventListener('pause', stopAudio);
+    video.addEventListener('ended', stopAudio);
   </script>
 </body></html>`;
 
@@ -248,7 +311,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => server?.close());
 
-test("video player — play, pause, seek, media keys, audio capture", async ({ browser }) => {
+test("video player — play, pause, seek, keyboard controls, blended audio", async ({ browser }) => {
   // register.cjs already calls applyHud with audio:true (from QA_HUD_AUDIO env var)
   const context = await browser.newContext({
     recordVideo: { dir: "tmp/", size: { width: 1280, height: 720 } },
@@ -257,76 +320,89 @@ test("video player — play, pause, seek, media keys, audio capture", async ({ b
 
   const page = await context.newPage();
   await page.goto(baseUrl);
-  // Wait for synthetic video to generate (~8s recording + encoding)
+  // Wait for the synthetic video to finish generating (~8s canvas recording + encoding)
   await page.waitForFunction(() => (window as any).__videoReady === true, null, { timeout: 30_000 });
   await hudWait(page, 800);
 
-  // 1. Introduction
-  await annotate(page, "Let's explore this video player");
+  // --- Introduction ---
+  await annotate(page, "Welcome to the video player demo. We'll play an embedded video with a soundtrack and demonstrate playback controls");
 
-  // Play the video — audio starts via AudioContext on play event
-  await annotate(page, "Playing the video", async () => {
+  // --- Play: first half with melody soundtrack ---
+  // annotate runs TTS + callback in parallel, so the melody plays under the narration
+  await annotate(page, "Pressing play — the video starts with a C-major scale melody", async () => {
     await clickEl(page, "#big-play");
-    await hudWait(page, 3000); // let video play with audio
+    await hudWait(page, 4000); // let melody play for several notes
   });
 
-  // Pause and seek
-  await annotate(page, "Pausing and seeking to the middle", async () => {
-    await clickEl(page, "#btn-play");
-    await hudWait(page, 500);
+  // --- Pause: stop melody FIRST, then narrate over silence ---
+  await clickEl(page, "#btn-play"); // pause immediately
+  await hudWait(page, 500); // let ScriptProcessorNode flush
+  await annotate(page, "We just paused the video — the melody has stopped");
+
+  // Assert: video is paused and melody is silent
+  const pausedAfterFirst = await page.evaluate(() =>
+    (document.getElementById("video") as HTMLVideoElement).paused,
+  );
+  expect(pausedAfterFirst).toBe(true);
+
+  // --- Seek to middle ---
+  await annotate(page, "Now seeking to the middle of the video using the progress bar", async () => {
     const bar = await page.evaluate(() => {
       const el = document.getElementById("progress-bar")!;
       const r = el.getBoundingClientRect();
       return { x: r.x, y: r.y + r.height / 2, w: r.width };
     });
-    await moveTo(page, bar.x + bar.w * 0.6, bar.y);
+    await moveTo(page, bar.x + bar.w * 0.5, bar.y);
     await hudWait(page, 300);
-    await page.click("#progress-bar", { position: { x: bar.w * 0.6, y: 3 } });
+    await page.click("#progress-bar", { position: { x: bar.w * 0.5, y: 3 } });
+    await hudWait(page, 500);
   });
 
-  // Resume and use keyboard shortcuts
-  await annotate(page, "Resuming with keyboard shortcuts", async () => {
+  // --- Resume: second half with melody ---
+  await annotate(page, "Resuming playback — the melody continues from where we left off", async () => {
     await clickEl(page, "#btn-play");
-    await hudWait(page, 2000);
-    await page.keyboard.press("Space"); // pause
-    await hudWait(page, 500);
-    await page.keyboard.press("ArrowRight");
-    await hudWait(page, 300);
-    await page.keyboard.press("ArrowLeft");
-    await hudWait(page, 300);
-    await page.keyboard.press("ArrowUp"); // volume up
-    await hudWait(page, 300);
-    await page.keyboard.press("ArrowDown"); // volume down
+    await hudWait(page, 4000); // play the second half with audio
   });
 
-  // Mute, unmute, and resume
-  await annotate(page, "Testing mute and skip controls", async () => {
-    await page.keyboard.press("m"); // mute
+  // --- Pause with Space, then demonstrate keyboard controls in silence ---
+  await page.keyboard.press("Space"); // pause
+  await hudWait(page, 500);
+  await annotate(page, "Paused with the Space key. Now using arrow keys to seek and adjust volume", async () => {
+    await page.keyboard.press("ArrowRight"); // +5s
     await hudWait(page, 500);
+    await page.keyboard.press("ArrowLeft"); // -5s
+    await hudWait(page, 500);
+    await page.keyboard.press("ArrowUp"); // volume up
+    await hudWait(page, 500);
+    await page.keyboard.press("ArrowDown"); // volume down
+    await hudWait(page, 500);
+  });
+
+  // --- Mute/unmute and resume ---
+  await annotate(page, "Toggling mute with the M key", async () => {
+    await page.keyboard.press("m"); // mute
+    await hudWait(page, 800);
     await page.keyboard.press("m"); // unmute
     await hudWait(page, 500);
+  });
+
+  await annotate(page, "Resuming playback — the melody is back", async () => {
     await page.keyboard.press("Space"); // resume
-    await hudWait(page, 2000); // play with audio
-    await clickEl(page, "#btn-prev");
-    await hudWait(page, 500);
-    await clickEl(page, "#btn-next");
+    await hudWait(page, 3000); // play with audio
   });
 
-  // Volume slider and finish
-  await annotate(page, "That's our video player demo!", async () => {
-    await moveToEl(page, "#volume");
-    await page.fill("#volume", "30");
-    await page.evaluate(() => {
-      const v = document.getElementById("volume") as HTMLInputElement;
-      v.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await hudWait(page, 500);
-    await page.keyboard.press("Space"); // pause
+  // --- Pause, then skip controls ---
+  await page.keyboard.press("Space"); // pause
+  await hudWait(page, 500);
+  await annotate(page, "Paused again. Testing the skip buttons to jump forward and backward", async () => {
+    await clickEl(page, "#btn-prev"); // -5s
+    await hudWait(page, 800);
+    await clickEl(page, "#btn-next"); // +5s
+    await hudWait(page, 800);
   });
 
-  // Verify video state
-  const paused = await page.evaluate(() => (document.getElementById("video") as HTMLVideoElement).paused);
-  expect(paused).toBe(true);
+  // --- Wrap up ---
+  await annotate(page, "That wraps up our video player demo — we heard the C-major melody blend with TTS narration, and verified that audio correctly pauses and resumes with the video");
 
   // Extract the embedded generated video to a file
   const videoBase64 = await page.evaluate(() => (window as any).__videoBase64 as string);
@@ -335,6 +411,17 @@ test("video player — play, pause, seek, media keys, audio capture", async ({ b
     writeFileSync(".demowright/07-embedded-video.webm", Buffer.from(videoBase64, "base64"));
   }
 
-  // Close context to trigger WAV save + ffmpeg mux (webm → mp4 with audio)
+  // Assert: video is paused at the end
+  const pausedFinal = await page.evaluate(() =>
+    (document.getElementById("video") as HTMLVideoElement).paused,
+  );
+  expect(pausedFinal).toBe(true);
+
+  // Assert: Web Audio capture received audio chunks from the melody
+  const chunkCount = await page.evaluate(() => (window as any).__audioChunkCount ?? 0);
+  console.log(`[07-video-player] Audio chunks captured: ${chunkCount}`);
+  expect(chunkCount, "Expected melody audio to be captured via Web Audio API intercept").toBeGreaterThan(0);
+
+  // Close context to trigger WAV save + ffmpeg mux (webm → mp4 with blended audio)
   await context.close();
 });

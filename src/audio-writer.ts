@@ -6,8 +6,13 @@
  */
 import { writeFileSync } from "node:fs";
 
+interface TimestampedChunk {
+  samples: Float32Array;
+  timestampMs: number;
+}
+
 export class AudioWriter {
-  private chunks: Float32Array[] = [];
+  private chunks: TimestampedChunk[] = [];
   private sampleRate = 44100;
   private channels = 2;
   private startMs = 0;
@@ -15,11 +20,14 @@ export class AudioWriter {
   /**
    * Called from the browser via page.exposeFunction.
    * Receives interleaved stereo float32 samples.
+   * Each chunk is timestamped with wall-clock time so silence gaps
+   * (e.g. during video pause) are preserved in the output.
    */
   addChunk(samples: number[], sampleRate: number): void {
-    if (this.chunks.length === 0) this.startMs = Date.now();
+    const now = Date.now();
+    if (this.chunks.length === 0) this.startMs = now;
     this.sampleRate = sampleRate;
-    this.chunks.push(new Float32Array(samples));
+    this.chunks.push({ samples: new Float32Array(samples), timestampMs: now });
   }
 
   /** Wall-clock time when first chunk arrived */
@@ -34,28 +42,28 @@ export class AudioWriter {
 
   /** Total samples collected (interleaved, so / channels for per-channel) */
   get totalSamples(): number {
-    return this.chunks.reduce((sum, c) => sum + c.length, 0);
+    return this.chunks.reduce((sum, c) => sum + c.samples.length, 0);
   }
 
+  /** Total duration including silence gaps (wall-clock based) */
   get duration(): number {
-    return this.totalSamples / this.channels / this.sampleRate;
+    if (this.chunks.length === 0) return 0;
+    const last = this.chunks[this.chunks.length - 1];
+    const lastDurMs = (last.samples.length / this.channels / this.sampleRate) * 1000;
+    return (last.timestampMs + lastDurMs - this.startMs) / 1000;
   }
 
   /**
    * Write collected audio to a WAV file.
    */
   save(filePath: string): void {
-    const totalSamples = this.totalSamples;
-    if (totalSamples === 0) return;
+    const float32 = this.toFloat32();
+    if (float32.length === 0) return;
 
-    // Convert float32 to int16
-    const int16 = new Int16Array(totalSamples);
-    let offset = 0;
-    for (const chunk of this.chunks) {
-      for (let i = 0; i < chunk.length; i++) {
-        const s = Math.max(-1, Math.min(1, chunk[i]));
-        int16[offset++] = s < 0 ? s * 0x8000 : s * 0x7fff;
-      }
+    const int16 = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
 
     const dataBytes = int16.length * 2;
@@ -83,17 +91,28 @@ export class AudioWriter {
   }
 
   /**
-   * Return all chunks concatenated as interleaved stereo float32.
+   * Return all audio as interleaved stereo float32, preserving silence gaps
+   * between chunks based on their wall-clock timestamps.
    */
   toFloat32(): Float32Array {
-    const total = this.totalSamples;
-    if (total === 0) return new Float32Array(0);
-    const out = new Float32Array(total);
-    let off = 0;
+    if (this.chunks.length === 0) return new Float32Array(0);
+
+    // Calculate total duration from first chunk to end of last chunk
+    const last = this.chunks[this.chunks.length - 1];
+    const lastDurMs = (last.samples.length / this.channels / this.sampleRate) * 1000;
+    const totalMs = last.timestampMs + lastDurMs - this.startMs;
+    const totalSamples = Math.ceil((totalMs / 1000) * this.sampleRate) * this.channels;
+
+    const out = new Float32Array(totalSamples); // zero-filled = silence
+
     for (const chunk of this.chunks) {
-      out.set(chunk, off);
-      off += chunk.length;
+      const offsetMs = chunk.timestampMs - this.startMs;
+      const offsetSamples = Math.floor((offsetMs / 1000) * this.sampleRate) * this.channels;
+      for (let i = 0; i < chunk.samples.length && offsetSamples + i < out.length; i++) {
+        out[offsetSamples + i] += chunk.samples[i];
+      }
     }
+
     return out;
   }
 

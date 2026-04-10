@@ -41,8 +41,24 @@ bun run build          # tsdown → dist/
 bun run typecheck      # tsgo --noEmit
 bun run lint           # oxlint src
 bun test               # runs tests/ with main playwright.config.ts
-bunx playwright test --config examples/playwright.config.ts  # run all 6 examples
+bunx playwright test --config examples/playwright.config.ts  # run all examples
 ```
+
+## Docker (audio capture)
+
+Pages that play audio (e.g. example 07) need Docker to capture the page's audio output.
+Playwright's built-in video recorder only captures video, not audio. The Docker container
+provides Xvfb + PulseAudio so headed Firefox outputs audio to a virtual sink that demowright
+records via `module-pipe-sink`.
+
+```bash
+./docker-run.sh                                    # all examples with audio capture
+./docker-run.sh examples/07-video-player.spec.ts   # single example
+```
+
+Without Docker, demowright still captures Web Audio API output (oscillators, media elements)
+via its browser-side `audio-capture.ts` intercept. Docker adds system-level PulseAudio capture
+as a second audio source.
 
 ## Package Manager
 
