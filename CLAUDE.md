@@ -37,10 +37,16 @@ register.cjs          # CJS preload for NODE_OPTIONS approach
 ## Build & Test
 
 ```bash
-npm run build          # tsc → dist/
-npm test               # runs tests/ with main playwright.config.ts
-npx playwright test --config examples/playwright.config.ts  # run all 6 examples
+bun run build          # tsdown → dist/
+bun run typecheck      # tsgo --noEmit
+bun run lint           # oxlint src
+bun test               # runs tests/ with main playwright.config.ts
+bunx playwright test --config examples/playwright.config.ts  # run all 6 examples
 ```
+
+## Package Manager
+
+Use `bun` — never `npm`. Install deps with `bun i`, run scripts with `bun run`.
 
 ## Documentation
 

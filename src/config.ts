@@ -10,7 +10,7 @@
  * into every BrowserContext automatically. No test file changes needed.
  */
 import { createRequire } from "node:module";
-import { readdirSync, existsSync, mkdirSync } from "node:fs";
+import { readdirSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { PlaywrightTestConfig } from "@playwright/test";

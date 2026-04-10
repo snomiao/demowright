@@ -301,8 +301,6 @@ function generateChapters(timeline: TimelineEntry[]): string {
   const chapters = timeline.filter((e) => e.kind === "segment" || e.kind === "title" || e.kind === "outro");
   return chapters
     .map((entry) => {
-      const startSec = (entry.startMs / 1000).toFixed(3);
-      const endSec = ((entry.startMs + entry.durationMs) / 1000).toFixed(3);
       return `[CHAPTER]\nTIMEBASE=1/1000\nSTART=${Math.round(entry.startMs)}\nEND=${Math.round(entry.startMs + entry.durationMs)}\ntitle=${entry.text.slice(0, 80)}`;
     })
     .join("\n\n");
@@ -543,7 +541,7 @@ class VideoScriptImpl {
    * for deferred track building at context close (setup.ts).
    */
   async run(page: Page): Promise<VideoScriptResult> {
-    const { timeline, totalMs, audioSegments } = await this.executeSteps(page);
+    const { timeline, totalMs } = await this.executeSteps(page);
     const srtContent = generateSrt(timeline);
     const chaptersContent = generateChapters(timeline);
     return { timeline, totalMs, srtContent, chaptersContent };

@@ -29,7 +29,7 @@ async function evaluateWithTimeout<A, R>(
   label = "page.evaluate",
 ): Promise<R | undefined> {
   let timer: NodeJS.Timeout | undefined;
-  const evalPromise = page.evaluate<R, A>(fn, arg);
+  const evalPromise = page.evaluate<R, A>(fn as Parameters<typeof page.evaluate<R, A>>[0], arg);
   // Attach a no-op rejection handler to the *original* promise so that, if
   // we race past it and abandon it, a later rejection (page close, navigate)
   // can't surface as an unhandled rejection. The original promise itself is

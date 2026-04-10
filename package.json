@@ -42,13 +42,17 @@
     "build": "tsdown",
     "test": "bunx playwright test",
     "demo": "bunx playwright test tests/demo.spec.ts --headed",
-    "prepublishOnly": "tsdown"
+    "prepublishOnly": "tsdown",
+    "lint": "oxlint src",
+    "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
     "@typescript/native-preview": "^7.0.0-dev.20260405.1",
+    "oxlint": "^1.59.0",
     "semantic-release": "^25.0.3",
-    "tsdown": "^0.21.7"
+    "tsdown": "^0.21.7",
+    "typescript": "^6.0.2"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"

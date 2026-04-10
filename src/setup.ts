@@ -381,7 +381,6 @@ function buildAndSaveAudioTrack(
   for (const seg of segments) {
     const dOff = seg.wavBuf.indexOf("data") + 8;
     if (dOff < 8) continue;
-    const sr = seg.wavBuf.readUInt32LE(24);
     const ch = seg.wavBuf.readUInt16LE(22);
     const pcmData = seg.wavBuf.subarray(dOff);
     const sampleCount = pcmData.length / 2;
@@ -728,9 +727,8 @@ function startPulseCaptureDirectly(outputDir: string): PulseCaptureHandle | unde
     }
   } catch {}
 
-  let moduleId: string | undefined;
   try {
-    moduleId = execSync(
+    execSync(
       `pactl load-module module-pipe-sink sink_name=demowright_sink file="${pipePath}" rate=44100 channels=2 format=s16le sink_properties=device.description="Demowright_Audio_Capture"`,
       { stdio: "pipe", encoding: "utf-8" },
     ).trim();
