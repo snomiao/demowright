@@ -96,6 +96,8 @@ interface SegmentStep {
   kind: "segment";
   text: string;
   action?: SegmentAction;
+  /** Runs BEFORE narration starts — use for navigation, page.goto(), scrolls, etc. */
+  setup?: () => Promise<void>;
 }
 
 interface TransitionStep {
@@ -467,14 +469,24 @@ class VideoScriptImpl {
 
   /**
    * Add a narrated segment — TTS audio drives timing, callback runs paced actions.
-   * Same as NarrationPlan's `.annotate()` but named `.segment()` for clarity.
+   *
+   * Two signatures (backwards-compatible):
+   *   .segment("narration", async (pace) => { ... })
+   *   .segment("narration", { setup: async () => { ... }, action: async (pace) => { ... } })
+   *
+   * `setup` runs BEFORE narration starts — use for page.goto(), scrolling, etc.
+   * `action` runs DURING narration — use for visual actions like safeMove, hover.
    */
-  segment(text: string, action?: SegmentAction): this {
-    this.steps.push({
-      kind: "segment",
-      text,
-      action,
-    });
+  segment(text: string, actionOrOpts?: SegmentAction | { setup?: () => Promise<void>; action?: SegmentAction }): this {
+    if (typeof actionOrOpts === "function") {
+      // Original API: segment(text, action)
+      this.steps.push({ kind: "segment", text, action: actionOrOpts });
+    } else if (actionOrOpts && typeof actionOrOpts === "object") {
+      // New API: segment(text, { setup, action })
+      this.steps.push({ kind: "segment", text, action: actionOrOpts.action, setup: actionOrOpts.setup });
+    } else {
+      this.steps.push({ kind: "segment", text });
+    }
     return this;
   }
 
@@ -665,7 +677,7 @@ class VideoScriptImpl {
     let segmentIndex = 0;
     for (let i = 0; i < this.steps.length; i++) {
       const step = this.steps[i];
-      const stepStartMs = Date.now();
+      let stepStartMs = Date.now();
 
       if (step.kind === "title" || step.kind === "outro") {
         const bg = step.background ?? DEFAULT_BG;
@@ -710,6 +722,12 @@ class VideoScriptImpl {
           overrunMs: 0,
         });
       } else if (step.kind === "segment") {
+        // Run setup BEFORE narration — for page.goto(), scrolls, etc.
+        if (step.setup) {
+          await step.setup();
+          stepStartMs = Date.now();
+        }
+
         const segId = `step-${segmentIndex}`;
         segmentIndex++;
         const segment = this.prepared.get(segId);
