@@ -207,16 +207,58 @@ export async function typeKeys(
 
 type TtsProviderType = string | ((text: string) => Promise<Buffer | ArrayBuffer>);
 
-/** Fetch audio from a TTS provider. Returns a WAV Buffer. */
+// Process-global TTS cache — shared across all pages/tests in the same worker.
+// Keyed by text content so identical narrations are fetched only once.
+const ttsCache = new Map<string, Buffer>();
+
+/** Fetch audio from a TTS provider. Returns a WAV Buffer (cached). */
 async function fetchTtsAudio(text: string, provider: TtsProviderType): Promise<Buffer> {
+  const cached = ttsCache.get(text);
+  if (cached) return cached;
+
+  let buf: Buffer;
   if (typeof provider === "string") {
     const url = provider.replace(/%s/g, encodeURIComponent(text));
     const res = await fetch(url);
     if (!res.ok) throw new Error(`TTS fetch ${res.status}`);
-    return Buffer.from(await res.arrayBuffer());
+    buf = Buffer.from(await res.arrayBuffer());
+  } else {
+    const result = await provider(text);
+    buf = Buffer.isBuffer(result) ? result : Buffer.from(result);
   }
-  const result = await provider(text);
-  return Buffer.isBuffer(result) ? result : Buffer.from(result);
+  ttsCache.set(text, buf);
+  return buf;
+}
+
+/**
+ * Pre-fetch TTS audio for all narration texts in parallel.
+ * Call this at the start of a test to eliminate per-annotate wait times.
+ *
+ * ```ts
+ * const narrations = [
+ *   "Welcome to the demo",
+ *   "Now clicking the button",
+ *   "That wraps up the tour",
+ * ];
+ * await prefetchTts(page, narrations);
+ *
+ * // All subsequent annotate/narrate calls hit the cache instantly
+ * await annotate(page, narrations[0], async () => { ... });
+ * ```
+ */
+export async function prefetchTts(page: Page, texts: string[]): Promise<void> {
+  const provider = getTtsProvider(page);
+  if (!provider) return;
+
+  const uncached = texts.filter((t) => !ttsCache.has(t));
+  if (uncached.length === 0) return;
+
+  console.log(`[demowright] Prefetching ${uncached.length} TTS segments...`);
+  const results = await Promise.allSettled(
+    uncached.map((text) => fetchTtsAudio(text, provider)),
+  );
+  const failed = results.filter((r) => r.status === "rejected").length;
+  if (failed > 0) console.warn(`[demowright] ${failed}/${uncached.length} TTS prefetch failed`);
 }
 
 /** Parse WAV and return { float32, sampleRate, channels, durationMs }. */

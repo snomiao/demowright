@@ -11,7 +11,7 @@ import http from "node:http";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { test, expect } from "@playwright/test";
-import { clickEl, moveToEl, moveTo, hudWait, annotate } from "../src/helpers.js";
+import { clickEl, moveToEl, moveTo, hudWait, annotate, prefetchTts } from "../src/helpers.js";
 
 // Generate TTS narration for the embedded video at import time
 const ttsText = "This is a demo video with generated narration. Watch the colorful animation as it moves across the screen.";
@@ -185,7 +185,11 @@ const HTML = `<!DOCTYPE html>
         }
       }
 
-      const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp8,opus' });
+      // Use vp8 only — adding opus codec fails in some Firefox builds when no audio track exists
+      const mimeType = combinedStream.getAudioTracks().length > 0
+        ? 'video/webm;codecs=vp8,opus'
+        : 'video/webm;codecs=vp8';
+      const recorder = new MediaRecorder(combinedStream, { mimeType });
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
@@ -320,12 +324,29 @@ test("video player — play, pause, seek, keyboard controls, blended audio", asy
 
   const page = await context.newPage();
   await page.goto(baseUrl);
-  // Wait for the synthetic video to finish generating (~8s canvas recording + encoding)
-  await page.waitForFunction(() => (window as any).__videoReady === true, null, { timeout: 30_000 });
+
+  // Prefetch all TTS narrations in parallel while the video generates.
+  // This eliminates per-annotate TTS fetch latency (~2-4s each with Gemini).
+  const narrations = [
+    "Welcome to the video player demo. We'll play an embedded video with a soundtrack and demonstrate playback controls",
+    "Pressing play — the video starts with a C-major scale melody",
+    "We just paused the video — the melody has stopped",
+    "Now seeking to the middle of the video using the progress bar",
+    "Resuming playback — the melody continues from where we left off",
+    "Paused with the Space key. Now using arrow keys to seek and adjust volume",
+    "Toggling mute with the M key",
+    "Resuming playback — the melody is back",
+    "Paused again. Testing the skip buttons to jump forward and backward",
+    "That wraps up our video player demo — we heard the C-major melody blend with TTS narration, and verified that audio correctly pauses and resumes with the video",
+  ];
+  await Promise.all([
+    prefetchTts(page, narrations),
+    page.waitForFunction(() => (window as any).__videoReady === true, null, { timeout: 60_000 }),
+  ]);
   await hudWait(page, 800);
 
   // --- Introduction ---
-  await annotate(page, "Welcome to the video player demo. We'll play an embedded video with a soundtrack and demonstrate playback controls");
+  await annotate(page, narrations[0]);
 
   // --- Play: first half with melody soundtrack ---
   // annotate runs TTS + callback in parallel, so the melody plays under the narration

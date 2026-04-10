@@ -49,6 +49,7 @@ export {
   caption,
   subtitle,
   annotate,
+  prefetchTts,
 } from "./helpers.js";
 
 // Auto-annotation hook for config/register integrations
