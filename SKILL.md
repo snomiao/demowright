@@ -1,11 +1,11 @@
 ---
 name: record-demo-video
-description: Use when the user wants to record a demo video of a web app or CLI tool — with voice narration, cursor animations, and subtitles. Covers browser demos (Playwright-based) and terminal demos (Docker screen capture). Activate when keywords like "demo video", "record", "screencast", "walkthrough video", or "product tour" appear.
+description: Records narrated demo videos — MP4 with cursor overlay, TTS narration, subtitles. TRIGGER on "demo video", "record", "screencast", "walkthrough", "product tour". Three modes — Playwright, Docker+PulseAudio (audio), Docker+x11grab (system UI).
 ---
 
 # record-demo-video
 
-## Which recording mode do I need?
+## Which recording mode?
 
 | What the page does | Recording mode | Docker? | Example |
 |--------------------|---------------|---------|---------|
@@ -161,15 +161,7 @@ await download.saveAs("/path/to/save");
 
 ## Docker
 
-### When Docker is needed
-
-Docker provides three things Playwright can't do alone:
-
-1. **PulseAudio** — virtual audio sink for capturing page audio output
-2. **Xvfb + fluxbox** — virtual display + window manager for headed browser
-3. **ffmpeg x11grab** — full-screen recording that captures system dialogs
-
-### Quick Run
+Docker provides PulseAudio (page audio), Xvfb + fluxbox (headed display), and ffmpeg x11grab (system UI capture). See [docs/docker.md](docs/docker.md) for architecture, env vars, and troubleshooting.
 
 ```bash
 ./docker-run.sh                                    # all examples
@@ -177,86 +169,7 @@ Docker provides three things Playwright can't do alone:
 ./docker-run.sh examples/08-file-upload-download.spec.ts  # system UI capture
 ```
 
-`docker-run.sh` automatically detects example 08 and wraps it with `docker-record-screen.sh` (ffmpeg x11grab). All other examples use Playwright's built-in video recorder.
-
-### Architecture
-
-```
-┌─ Docker Container ───────────────────────────────────────────┐
-│  dbus            → PulseAudio module loading                 │
-│  Xvfb :99        → virtual display (1280×720)                │
-│  fluxbox         → window manager (system dialogs need it)   │
-│  PulseAudio      → virtual audio sink (module-pipe-sink)     │
-│                                                              │
-│  Firefox (headed) → renders to :99, audio to PulseAudio      │
-│  Playwright       → controls Firefox                         │
-│  demowright       → cursor overlay, TTS, audio capture       │
-│                                                              │
-│  Recording:                                                  │
-│    Mode A: Playwright video (DOM only) + PulseAudio WAV      │
-│    Mode B: ffmpeg x11grab (full screen incl. system dialogs) │
-│                                                              │
-│  Post: ffmpeg mux video + TTS WAV + page audio → MP4         │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Key environment variables
-
-| Variable | Set by | Purpose |
-|----------|--------|---------|
-| `DISPLAY=:99` | entrypoint | Xvfb display for headed browser |
-| `XDG_RUNTIME_DIR` | entrypoint | PulseAudio socket discovery |
-| `PULSE_SERVER` | entrypoint | Explicit PulseAudio socket path |
-| `DEMOWRIGHT_DOCKER=1` | docker-run.sh | Enables system-picker mode in example 08 |
-| `GEMINI_API_KEY` | .env.local | TTS narration provider |
-
-### Page audio capture (PulseAudio)
-
-When `audio: true` is set in config, demowright:
-
-1. Creates `module-pipe-sink` named `demowright_sink` (main process, before workers)
-2. Sets it as default sink → Firefox routes audio there
-3. Workers read raw PCM from the FIFO pipe
-4. On context close: PCM → WAV → mixed with TTS segments → ffmpeg mux
-
-Two capture layers work together:
-- **Web Audio API intercept** (`audio-capture.ts`) — monkey-patches `AudioNode.prototype.connect`, captures PCM via ScriptProcessorNode. Works without Docker.
-- **PulseAudio pipe-sink** — system-level capture of ALL browser audio. Docker only.
-
-**Important**: `AudioContext` created in response to Playwright clicks stays `suspended` (autoplay policy). Always call `await ctx.resume()` explicitly.
-
-### System UI capture (xdotool + x11grab)
-
-Playwright video records page DOM only — OS dialogs (file picker, print, auth) are invisible. To capture them:
-
-1. **ffmpeg x11grab** records the entire Xvfb display (sees everything)
-2. **xdotool** clicks at OS level (bypasses Playwright's filechooser intercept)
-3. **xdotool** drives the dialog (Ctrl+L → path → Enter for GTK file chooser)
-
-Key techniques:
-
-```ts
-// Get absolute screen coordinates (Firefox-specific API)
-const pos = await page.evaluate(() => ({
-  x: (window as any).mozInnerScreenX + rect.x,
-  y: (window as any).mozInnerScreenY + rect.y,
-}));
-
-// Click at OS level — Playwright doesn't intercept this
-execSync(`xdotool mousemove ${pos.x} ${pos.y} click 1`);
-
-// Wait for dialog by iterating windows (search --name is unreliable)
-for (const winId of allWindows) {
-  const name = execSync(`xdotool getwindowname ${winId}`);
-  if (name.includes("File Upload")) { /* found it */ }
-}
-
-// Drive the dialog
-execSync(`xdotool windowactivate --sync ${dialogId}`);
-execSync("xdotool key ctrl+l");
-execSync(`xdotool type --delay 30 "${filePath}"`);
-execSync("xdotool key Return");
-```
+`docker-run.sh` auto-detects example 08 and wraps it with `docker-record-screen.sh` (ffmpeg x11grab). All other examples use Playwright's video recorder + PulseAudio mux.
 
 ---
 
@@ -277,16 +190,14 @@ execSync("xdotool key Return");
 
 ## Common Pitfalls
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| TTS waiting 2-4s per annotate | Each call fetches on demand | Use `prefetchTts()` or `script.prepare()` to batch-fetch upfront |
-| Audio plays during pause in output | AudioWriter discards silence gaps | Fixed: chunks are timestamped, silence gaps preserved |
-| `AudioContext.state === "suspended"` | Playwright clicks aren't user gestures | `await ctx.resume()` after creating AudioContext |
-| File picker not visible in video | Playwright video captures DOM only | Use Docker with ffmpeg x11grab (example 08) |
-| `xdotool search --name` misses dialog | Regex matching unreliable for Firefox | Iterate windows with `getwindowname` instead |
-| Click misses button via xdotool | `window.screenY` returns 0 | Use `mozInnerScreenX/Y` (Firefox-specific) |
-| Local test overwrites Docker video | Both write to same `.demowright/` path | `test.skip(!process.env.DEMOWRIGHT_DOCKER)` for Docker-only tests |
-| Gemini raw PCM sounds like noise | PCM returned without WAV header | Add 44-byte RIFF/WAV header |
+| Problem | Fix |
+|---------|-----|
+| TTS waiting 2-4s per annotate | `prefetchTts()` or `script.prepare()` to batch-fetch upfront |
+| Audio plays during pause in output | Do the action OUTSIDE `annotate()` callback (see timing pattern above) |
+| `AudioContext.state === "suspended"` | `await ctx.resume()` — Playwright clicks aren't user gestures |
+| File picker not visible in video | Use Docker + x11grab (example 08). See [docs/docker.md](docs/docker.md) |
+| Gemini TTS sounds like noise | Raw PCM needs a 44-byte WAV header before use |
+| Local test overwrites Docker video | `test.skip(!process.env.DEMOWRIGHT_DOCKER)` for Docker-only tests |
 
 ---
 
