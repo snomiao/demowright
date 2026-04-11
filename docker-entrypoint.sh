@@ -37,6 +37,17 @@ export PULSE_SERVER="unix:${PULSE_SOCKET}"
 fluxbox 2>/dev/null &
 sleep 0.3
 
+# Set a branded desktop background AFTER fluxbox starts (fluxbox overrides
+# the X root window with its own default). Generate a dark wallpaper with
+# demowright branding so the first frames of screen recordings look clean.
+convert -size 1280x720 xc:"#0f172a" \
+  -font "DejaVu-Sans" -pointsize 42 -fill "#1e293b" \
+  -gravity center -annotate +0-40 "demowright" \
+  -pointsize 16 -fill "#334155" \
+  -annotate +0+20 "Playwright Video Production" \
+  /tmp/demowright-bg.png 2>/dev/null
+fbsetbg -f /tmp/demowright-bg.png 2>/dev/null || xsetroot -solid "#0f172a" 2>/dev/null || true
+
 echo "[demowright-docker] Xvfb :99 ready, fluxbox ready, PulseAudio ready (PULSE_SERVER=$PULSE_SERVER)"
 
 # Run the command passed to the container

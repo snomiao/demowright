@@ -345,7 +345,9 @@ test("file manager — system file picker via xdotool, downloads", async ({ brow
     // Wait for the GTK "File Upload" dialog
     const dialogWin = waitForWindow("File Upload");
     if (!dialogWin) throw new Error("GTK file picker did not open");
-    // Activate the dialog so xdotool key sends go to it
+    // Resize and center the dialog so it fits within the 1280x720 capture area
+    execSync(`xdotool windowsize ${dialogWin} 900 550`);
+    execSync(`xdotool windowmove ${dialogWin} 190 85`);
     execSync(`xdotool windowactivate --sync ${dialogWin}`);
     await hudWait(page, 2500); // give viewers time to see the dialog
   });
