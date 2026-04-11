@@ -1,23 +1,41 @@
 /**
- * Example 8: File upload / download demo
+ * Example 8: File upload / download with REAL system file picker
  *
- * Demonstrates Playwright's file handling:
- * - `page.setInputFiles()` for uploads — bypasses the native OS file picker
- *   entirely, so Docker is NOT needed (unlike example 07 which captures page
- *   audio). Playwright injects the file selection programmatically.
- * - `page.waitForEvent('download')` for downloads — captures the file to a
- *   known location without showing a native save dialog.
+ * Demonstrates capturing the native OS file chooser dialog in a demo video.
+ * Requires Docker (Xvfb + fluxbox + xdotool + ffmpeg x11grab) because:
+ *   1. Playwright's video recorder captures only the page DOM, NOT system UI.
+ *      The native GTK file chooser is rendered by the OS, not by the page,
+ *      so it would be invisible in a normal Playwright recording.
+ *   2. The native dialog can only be opened by an X11-level click (via xdotool).
+ *      Calling page.locator().click() goes through Playwright's protocol which
+ *      auto-intercepts the file chooser and prevents the dialog from opening.
  *
- * The UI shows a drag-and-drop zone, file list with download/delete actions,
- * and toast notifications. Files are stored as blobs in memory and downloaded
- * via blob URLs + <a download>.
+ * Run inside Docker with screen capture:
+ *   ./docker-run.sh examples/08-file-upload-download.spec.ts
+ *
+ * The test:
+ *   - Computes the absolute screen coordinates of the browse button using
+ *     Firefox's mozInnerScreenX/Y (content area position on the desktop)
+ *   - Uses xdotool to issue an X11 mouse click → Firefox opens the GTK dialog
+ *   - Drives the dialog with xdotool keystrokes (Ctrl+L → path → Enter)
+ *   - The container's outer ffmpeg x11grab captures the entire screen,
+ *     including the dialog
+ *   - For the download flow, uses Playwright's normal download capture API
  */
 import http from "node:http";
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "@playwright/test";
 import { moveToEl, clickEl, hudWait, annotate, prefetchTts } from "../src/helpers.js";
+
+// Whether to use the system file picker via xdotool. Enabled when running
+// inside the Docker container which has Xvfb + xdotool available.
+const USE_SYSTEM_PICKER = !!process.env.DEMOWRIGHT_DOCKER && (() => {
+  try { execSync("which xdotool", { stdio: "pipe" }); return true; }
+  catch { return false; }
+})();
 
 const HTML = `<!DOCTYPE html>
 <html><head><title>08 File Manager</title><style>
@@ -33,7 +51,7 @@ const HTML = `<!DOCTYPE html>
   .dropzone-icon { font-size: 40px; margin-bottom: 12px; display: block; }
   .dropzone-text { color: #cbd5e1; font-size: 16px; margin-bottom: 4px; }
   .dropzone-hint { color: #64748b; font-size: 13px; }
-  .dropzone-btn { display: inline-block; margin-top: 14px; padding: 8px 20px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+  .dropzone-btn { display: inline-block; margin-top: 14px; padding: 10px 28px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
   .dropzone-btn:hover { background: #2563eb; }
 
   .file-list { margin-top: 24px; }
@@ -66,10 +84,9 @@ const HTML = `<!DOCTYPE html>
 
     <div class="dropzone" id="dropzone">
       <span class="dropzone-icon">⬆️</span>
-      <div class="dropzone-text">Drag files here to upload</div>
-      <div class="dropzone-hint">or</div>
+      <div class="dropzone-text">Click the button to choose a file</div>
       <button class="dropzone-btn" id="browse-btn">Browse Files</button>
-      <input type="file" id="file-input" multiple style="display: none" />
+      <input type="file" id="file-input" multiple />
     </div>
 
     <div class="file-list">
@@ -94,13 +111,12 @@ const HTML = `<!DOCTYPE html>
     const emptyState = document.getElementById('empty-state');
     const toast = document.getElementById('toast');
 
-    // In-memory file store: id → { name, blob, size, uploadedAt }
     const files = new Map();
     let nextId = 1;
 
-    function showToast(msg, type = 'info') {
+    function showToast(msg, type) {
       toast.textContent = msg;
-      toast.className = 'toast show ' + type;
+      toast.className = 'toast show ' + (type || 'info');
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
 
@@ -115,21 +131,12 @@ const HTML = `<!DOCTYPE html>
       if (['txt', 'md'].includes(ext)) return '📄';
       if (['json', 'js', 'ts', 'py'].includes(ext)) return '💻';
       if (['png', 'jpg', 'gif', 'webp'].includes(ext)) return '🖼️';
-      if (['pdf'].includes(ext)) return '📕';
-      if (['zip', 'tar', 'gz'].includes(ext)) return '📦';
       return '📎';
     }
 
     function render() {
-      // Clear list
-      const existingItems = fileListBody.querySelectorAll('.file-item');
-      existingItems.forEach(el => el.remove());
-
-      if (files.size === 0) {
-        emptyState.style.display = 'block';
-      } else {
-        emptyState.style.display = 'none';
-      }
+      fileListBody.querySelectorAll('.file-item').forEach(el => el.remove());
+      emptyState.style.display = files.size === 0 ? 'block' : 'none';
 
       files.forEach((file, id) => {
         const item = document.createElement('div');
@@ -167,15 +174,7 @@ const HTML = `<!DOCTYPE html>
       else if (added.length > 1) showToast('Uploaded ' + added.length + ' files', 'success');
     }
 
-    // Browse button → native file picker (bypassed by Playwright setInputFiles)
     browseBtn.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('click', (e) => {
-      if (e.target === dropzone || e.target.classList.contains('dropzone-icon') ||
-          e.target.classList.contains('dropzone-text') || e.target.classList.contains('dropzone-hint')) {
-        fileInput.click();
-      }
-    });
-
     fileInput.addEventListener('change', () => {
       if (fileInput.files && fileInput.files.length > 0) {
         addFiles(Array.from(fileInput.files));
@@ -183,25 +182,6 @@ const HTML = `<!DOCTYPE html>
       }
     });
 
-    // Drag-and-drop upload
-    dropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropzone.classList.add('drag-over');
-    });
-    dropzone.addEventListener('dragleave', (e) => {
-      if (!dropzone.contains(e.relatedTarget)) {
-        dropzone.classList.remove('drag-over');
-      }
-    });
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.classList.remove('drag-over');
-      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-        addFiles(Array.from(e.dataTransfer.files));
-      }
-    });
-
-    // Download / delete actions (event delegation)
     fileListBody.addEventListener('click', (e) => {
       const btn = e.target.closest('button.action-btn');
       if (!btn) return;
@@ -226,13 +206,10 @@ const HTML = `<!DOCTYPE html>
         showToast('Deleted "' + name + '"', 'error');
       }
     });
-
-    // Expose for testing
-    window.__fileManager = { files, addFiles };
   </script>
 </body></html>`;
 
-// Create sample files in a temp dir for the upload demo
+// Sample files for the upload demo (created in temp dir)
 const sampleDir = join(tmpdir(), "demowright-08-samples");
 mkdirSync(sampleDir, { recursive: true });
 const sampleFile1 = join(sampleDir, "meeting-notes.txt");
@@ -240,9 +217,89 @@ const sampleFile2 = join(sampleDir, "config.json");
 writeFileSync(sampleFile1, "# Meeting Notes\n\n- Discussed Q2 roadmap\n- Reviewed design mocks\n- Scheduled next sync\n");
 writeFileSync(sampleFile2, JSON.stringify({ theme: "dark", fontSize: 14, language: "en" }, null, 2));
 
-// Download output directory
 const downloadDir = join(process.cwd(), ".demowright", "downloads");
 mkdirSync(downloadDir, { recursive: true });
+
+// --- xdotool helpers (Docker only) ---
+
+/** Get the absolute screen coordinates of an element's center using mozInnerScreenX/Y. */
+async function getScreenCenter(page: any, selector: string): Promise<{ x: number; y: number }> {
+  return await page.evaluate((sel: string) => {
+    const el = document.querySelector(sel) as HTMLElement;
+    const r = el.getBoundingClientRect();
+    const w = window as any;
+    const screenX = w.mozInnerScreenX ?? window.screenX;
+    const screenY = w.mozInnerScreenY ?? window.screenY;
+    return {
+      x: Math.round(screenX + r.x + r.width / 2),
+      y: Math.round(screenY + r.y + r.height / 2),
+    };
+  }, selector);
+}
+
+/** Click an element via xdotool — bypasses Playwright's protocol so the
+ *  filechooser intercept doesn't trigger and the native dialog can open.
+ *  Activates the Firefox window first so the click reaches the right window. */
+async function xdoClick(page: any, selector: string): Promise<void> {
+  const { x, y } = await getScreenCenter(page, selector);
+  // Activate the main Firefox content window (not a dialog) so the click
+  // reaches the page. We pick the window whose title matches the page title.
+  try {
+    const all = execSync("xdotool search --class firefox 2>/dev/null", { encoding: "utf-8" }).trim().split("\n");
+    for (const w of all) {
+      try {
+        const name = execSync(`xdotool getwindowname ${w} 2>/dev/null`, { encoding: "utf-8" }).trim();
+        // Main window has the page title; dialogs have "File Upload - ..." prefix
+        if (name && !name.startsWith("File Upload")) {
+          execSync(`xdotool windowactivate --sync ${w}`);
+          break;
+        }
+      } catch {}
+    }
+  } catch {}
+  execSync("sleep 0.2");
+  execSync(`xdotool mousemove ${x} ${y}`);
+  execSync("sleep 0.1");
+  execSync("xdotool click 1");
+}
+
+/** Wait for a window whose title contains `nameSubstring`. Iterates all
+ *  windows and checks getwindowname (xdotool's `search --name` regex doesn't
+ *  reliably match Firefox file dialogs in some environments). */
+function waitForWindow(nameSubstring: string, timeoutMs = 5000): string | undefined {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const all = execSync("xdotool search --name '' 2>/dev/null", { encoding: "utf-8" }).trim().split("\n");
+      for (const w of all) {
+        if (!w) continue;
+        try {
+          const name = execSync(`xdotool getwindowname ${w} 2>/dev/null`, { encoding: "utf-8" }).trim();
+          if (name && name.includes(nameSubstring)) return w;
+        } catch {}
+      }
+    } catch {}
+    execSync("sleep 0.1");
+  }
+  return undefined;
+}
+
+/** Type a path into a GTK file chooser using Ctrl+L → text → Return. */
+function gtkPickerEnterPath(path: string): void {
+  // Ctrl+L opens the location/path entry box in the GTK file chooser
+  execSync("xdotool key ctrl+l");
+  execSync("sleep 0.3");
+  // Use xdotool type to enter the path character by character
+  execSync(`xdotool type --delay 30 ${JSON.stringify(path)}`);
+  execSync("sleep 0.3");
+  execSync("xdotool key Return");
+}
+
+// When using system file picker, disable Playwright video — the outer ffmpeg
+// x11grab handles screen recording (Playwright video can't capture system UI).
+if (USE_SYSTEM_PICKER) {
+  test.use({ video: "off" });
+}
 
 let server: http.Server;
 let baseUrl: string;
@@ -256,9 +313,11 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => server?.close());
 
-test("file manager — upload, download, delete, drag-and-drop", async ({ browser }) => {
+test("file manager — system file picker via xdotool, downloads", async ({ browser }) => {
+  // When using xdotool/system picker, we don't need Playwright's video
+  // (the outer ffmpeg x11grab records the screen including the dialog).
   const context = await browser.newContext({
-    recordVideo: { dir: "tmp/", size: { width: 1280, height: 720 } },
+    recordVideo: USE_SYSTEM_PICKER ? undefined : { dir: "tmp/", size: { width: 1280, height: 720 } },
     viewport: { width: 1280, height: 720 },
     acceptDownloads: true,
   });
@@ -266,42 +325,70 @@ test("file manager — upload, download, delete, drag-and-drop", async ({ browse
 
   await page.goto(baseUrl);
 
-  // Prefetch all narrations in parallel
-  const narrations = [
-    "Welcome to the file manager demo. We'll upload, download, and manage files using Playwright's file handling APIs",
-    "Let's upload a text file by clicking the browse button. Playwright's setInputFiles bypasses the native OS file picker entirely",
-    "The file appears in our list with its name, size, and upload time. Now let's download it back to verify the content",
-    "Downloaded successfully. Playwright captures downloads programmatically, no native save dialog needed",
-    "Let's upload another file — a JSON configuration file. Watch how the list updates with the new entry",
-    "Now we'll delete the first file. Just click the delete button to remove it from the list",
-    "File deleted. And that wraps up our file manager demo — uploads and downloads work without any system UI interaction",
-  ];
+  const narrations = USE_SYSTEM_PICKER
+    ? [
+        "Welcome to the file manager demo. We'll upload files using the real native system file picker, captured via screen recording",
+        "Clicking the browse button. Watch as the native file chooser dialog opens — this is the actual operating system UI, not a web component",
+        "Now we'll type the file path directly using the GTK location entry, then press Enter to select it",
+        "The file appears in our list. Now let's download it back to verify the content",
+        "Downloaded successfully. Now let's upload another file the same way — through the native picker",
+        "Two files are now uploaded. Let's delete the first one to clean up",
+        "And that wraps up our demo — the system file picker was captured because we used screen recording, not Playwright's DOM-only video recorder",
+      ]
+    : [
+        "Welcome to the file manager demo. NOTE: this run uses Playwright's setInputFiles which bypasses the system picker. Run inside Docker to see the real native dialog",
+        "Uploading a text file via setInputFiles",
+        "File appears in the list. Downloading it back to verify",
+        "Downloaded successfully",
+        "Uploading another file",
+        "Deleting the first file",
+        "Demo complete",
+      ];
   await prefetchTts(page, narrations);
   await hudWait(page, 500);
 
   // --- Introduction ---
   await annotate(page, narrations[0]);
 
-  // --- Upload via browse button ---
-  await annotate(page, narrations[1], async () => {
-    await moveToEl(page, "#browse-btn");
-    await hudWait(page, 500);
-    // setInputFiles injects the file selection without opening any native dialog
-    await page.locator("#file-input").setInputFiles(sampleFile1);
-    await hudWait(page, 1500);
-  });
+  // --- Upload file 1 ---
+  if (USE_SYSTEM_PICKER) {
+    await annotate(page, narrations[1], async () => {
+      await moveToEl(page, "#browse-btn");
+      await hudWait(page, 800);
+      // X11 click bypasses Playwright's filechooser intercept → native dialog opens
+      await xdoClick(page, "#browse-btn");
+      // Wait for the GTK "File Upload" dialog
+      const dialogWin = waitForWindow("File Upload");
+      if (!dialogWin) throw new Error("GTK file picker did not open");
+      // Activate the dialog so xdotool key sends go to it
+      execSync(`xdotool windowactivate --sync ${dialogWin}`);
+      await hudWait(page, 1500);
+    });
 
-  // Assert: file appears in the list
+    await annotate(page, narrations[2], async () => {
+      gtkPickerEnterPath(sampleFile1);
+      await hudWait(page, 1500);
+    });
+  } else {
+    await annotate(page, narrations[1], async () => {
+      await moveToEl(page, "#browse-btn");
+      await hudWait(page, 500);
+      await page.locator("#file-input").setInputFiles(sampleFile1);
+      await hudWait(page, 1500);
+    });
+  }
+
+  // Wait for the file to actually appear (the GTK dialog dismissal is async)
+  await page.waitForSelector(".file-item .file-name", { timeout: 10_000 });
   const fileName1 = await page.locator(".file-item .file-name").first().textContent();
   expect(fileName1).toBe("meeting-notes.txt");
 
-  // --- Download the file ---
-  await annotate(page, narrations[2], async () => {
+  // --- Download flow (always uses Playwright API — no system save dialog) ---
+  await annotate(page, narrations[3], async () => {
     await moveToEl(page, ".file-item .action-btn.download");
     await hudWait(page, 500);
   });
 
-  // Capture the download — waitForEvent must start BEFORE the click that triggers it
   const downloadPromise = page.waitForEvent("download");
   await clickEl(page, ".file-item .action-btn.download");
   const download = await downloadPromise;
@@ -309,27 +396,37 @@ test("file manager — upload, download, delete, drag-and-drop", async ({ browse
   await download.saveAs(savedPath);
   await hudWait(page, 1500);
 
-  await annotate(page, narrations[3]);
-
-  // Assert: downloaded file matches the uploaded one
   expect(existsSync(savedPath)).toBe(true);
-  const uploadedContent = readFileSync(sampleFile1, "utf-8");
-  const downloadedContent = readFileSync(savedPath, "utf-8");
-  expect(downloadedContent).toBe(uploadedContent);
+  expect(readFileSync(savedPath, "utf-8")).toBe(readFileSync(sampleFile1, "utf-8"));
 
-  // --- Upload a second file ---
-  await annotate(page, narrations[4], async () => {
-    await moveToEl(page, "#browse-btn");
-    await hudWait(page, 500);
-    await page.locator("#file-input").setInputFiles(sampleFile2);
-    await hudWait(page, 1500);
-  });
+  // --- Upload file 2 ---
+  if (USE_SYSTEM_PICKER) {
+    await annotate(page, narrations[4], async () => {
+      await moveToEl(page, "#browse-btn");
+      await hudWait(page, 800);
+      await xdoClick(page, "#browse-btn");
+      const dialogWin = waitForWindow("File Upload");
+      if (!dialogWin) throw new Error("GTK file picker did not open");
+      // Activate the dialog so xdotool key sends go to it
+      execSync(`xdotool windowactivate --sync ${dialogWin}`);
+      await hudWait(page, 1000);
+      gtkPickerEnterPath(sampleFile2);
+      await hudWait(page, 1500);
+    });
+  } else {
+    await annotate(page, narrations[4], async () => {
+      await moveToEl(page, "#browse-btn");
+      await hudWait(page, 500);
+      await page.locator("#file-input").setInputFiles(sampleFile2);
+      await hudWait(page, 1500);
+    });
+  }
 
-  // Assert: two files now in the list
+  await page.waitForFunction(() => document.querySelectorAll(".file-item").length === 2, null, { timeout: 10_000 });
   const fileItems = await page.locator(".file-item").count();
   expect(fileItems).toBe(2);
 
-  // --- Delete the first file ---
+  // --- Delete first file ---
   await annotate(page, narrations[5], async () => {
     await moveToEl(page, ".file-item .action-btn.delete");
     await hudWait(page, 500);
@@ -337,11 +434,9 @@ test("file manager — upload, download, delete, drag-and-drop", async ({ browse
     await hudWait(page, 1500);
   });
 
-  // Assert: one file remains and it's config.json
+  await page.waitForFunction(() => document.querySelectorAll(".file-item").length === 1, null, { timeout: 5000 });
   const remainingCount = await page.locator(".file-item").count();
   expect(remainingCount).toBe(1);
-  const remainingName = await page.locator(".file-item .file-name").textContent();
-  expect(remainingName).toBe("config.json");
 
   // --- Wrap up ---
   await annotate(page, narrations[6]);

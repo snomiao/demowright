@@ -36,6 +36,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     espeak-ng \
     # dbus (avoids noisy PulseAudio warnings)
     dbus \
+    # Window manager + xdotool + screen tools (for example 08 system file picker
+    # which can't be captured by Playwright's video recorder — needs ffmpeg x11grab)
+    fluxbox \
+    xdotool \
+    imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 # Install bun
@@ -58,7 +63,8 @@ COPY . .
 RUN bun run build
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+COPY docker-record-screen.sh /app/docker-record-screen.sh
+RUN chmod +x /docker-entrypoint.sh /app/docker-record-screen.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["bunx", "playwright", "test", "--config", "examples/playwright.config.ts"]

@@ -44,21 +44,31 @@ bun test               # runs tests/ with main playwright.config.ts
 bunx playwright test --config examples/playwright.config.ts  # run all examples
 ```
 
-## Docker (audio capture)
+## Docker (audio + system-UI capture)
 
-Pages that play audio (e.g. example 07) need Docker to capture the page's audio output.
-Playwright's built-in video recorder only captures video, not audio. The Docker container
-provides Xvfb + PulseAudio so headed Firefox outputs audio to a virtual sink that demowright
-records via `module-pipe-sink`.
+Some examples need Docker because Playwright's built-in video recorder has two
+fundamental limitations:
+
+1. **No page audio** — pages that play sound (example 07) need Docker's PulseAudio
+   sink to route Firefox audio into a captureable file.
+2. **No system UI** — system dialogs like the GTK file picker (example 08) are
+   rendered by the OS, not by the page DOM, so Playwright video can't see them.
+   Docker provides Xvfb + fluxbox + xdotool + ffmpeg x11grab to capture the
+   entire screen including any native dialogs.
 
 ```bash
-./docker-run.sh                                    # all examples with audio capture
-./docker-run.sh examples/07-video-player.spec.ts   # single example
+./docker-run.sh                                    # all examples
+./docker-run.sh examples/07-video-player.spec.ts   # audio capture (PulseAudio)
+./docker-run.sh examples/08-file-upload-download.spec.ts  # screen capture (x11grab)
 ```
 
-Without Docker, demowright still captures Web Audio API output (oscillators, media elements)
-via its browser-side `audio-capture.ts` intercept. Docker adds system-level PulseAudio capture
-as a second audio source.
+`docker-run.sh` automatically wraps example 08 with `docker-record-screen.sh`
+which starts ffmpeg x11grab before the test and muxes demowright's TTS WAV
+into the final MP4.
+
+Without Docker, demowright still captures Web Audio API output (oscillators,
+media elements) via its browser-side `audio-capture.ts` intercept, and example
+08 falls back to Playwright's `setInputFiles()` which bypasses the system picker.
 
 ## Package Manager
 
@@ -88,4 +98,4 @@ Use `bun` — never `npm`. Install deps with `bun i`, run scripts with `bun run`
 | 05 | `examples/05-kanban-board.spec.ts` | Kanban board — drag-and-drop cards between columns |
 | 06 | `examples/06-native-api.spec.ts` | Native Playwright API — zero helpers, auto-delay only |
 | 07 | `examples/07-video-player.spec.ts` | Video player — play, pause, seek, media keys, audio |
-| 08 | `examples/08-file-upload-download.spec.ts` | File manager — upload via setInputFiles, download capture |
+| 08 | `examples/08-file-upload-download.spec.ts` | File manager — real GTK file picker via xdotool + screen capture |

@@ -233,6 +233,107 @@ docker run --gpus all -e NVIDIA_VISIBLE_DEVICES=all ...
 
 ---
 
+### Capturing System UI (File Pickers, Native Dialogs)
+
+**Problem**: Playwright's video recorder captures only the page DOM via the
+browser protocol. Native dialogs like the GTK file chooser are rendered by
+the OS, not by the page, so they're invisible to Playwright video. Even
+running headed in Docker doesn't help — you need full-screen recording.
+
+**Solution**: Use ffmpeg `x11grab` to record the entire Xvfb display, then
+mux in demowright's TTS audio. Drive the system dialog with `xdotool`.
+
+#### Two key bypasses
+
+1. **Open the dialog** — `page.locator().click()` triggers Playwright's
+   filechooser intercept which prevents the OS dialog from opening. Instead,
+   use `xdotool` to send an X11-level click. The browser sees a real mouse
+   event (not a protocol-level click) and opens the native dialog.
+
+   ```ts
+   // Get absolute screen coordinates of the button (Firefox-specific:
+   // mozInnerScreenX/Y reports content area position on the desktop)
+   const { x, y } = await page.evaluate(() => {
+     const r = document.querySelector('#browse-btn')!.getBoundingClientRect();
+     return {
+       x: Math.round((window as any).mozInnerScreenX + r.x + r.width / 2),
+       y: Math.round((window as any).mozInnerScreenY + r.y + r.height / 2),
+     };
+   });
+   execSync(`xdotool mousemove ${x} ${y} click 1`);
+   ```
+
+2. **Drive the dialog** — once the GTK file chooser is open, use Ctrl+L
+   (location bar) to enter a path:
+
+   ```ts
+   execSync('xdotool key ctrl+l');
+   execSync(`xdotool type --delay 30 ${JSON.stringify(filePath)}`);
+   execSync('xdotool key Return');
+   ```
+
+#### Detecting the dialog
+
+`xdotool search --name` is unreliable in some configs (it doesn't always
+match Firefox dialog titles). Iterate windows with `getwindowname` instead:
+
+```ts
+function waitForWindow(substring: string, timeoutMs = 5000): string | undefined {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const all = execSync("xdotool search --name '' 2>/dev/null", { encoding: "utf-8" }).trim().split("\n");
+    for (const w of all) {
+      try {
+        const name = execSync(`xdotool getwindowname ${w} 2>/dev/null`, { encoding: "utf-8" }).trim();
+        if (name && name.includes(substring)) return w;
+      } catch {}
+    }
+    execSync("sleep 0.1");
+  }
+  return undefined;
+}
+```
+
+#### Screen recording wrapper
+
+`docker-record-screen.sh` wraps the test invocation:
+
+```bash
+ffmpeg -nostdin -f x11grab -framerate 30 -video_size 1280x720 -i :99.0 \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -y screen.raw.mp4 &
+FFMPEG_PID=$!
+
+bash -c "$@"
+
+kill -INT "$FFMPEG_PID"
+wait "$FFMPEG_PID"
+
+# Mux in demowright's saved TTS WAV
+ffmpeg -i screen.raw.mp4 -i demowright-audio.wav \
+  -c:v copy -c:a aac -b:a 128k -shortest screen-final.mp4
+```
+
+#### Required Dockerfile additions
+
+```dockerfile
+RUN apt-get install -y \
+    fluxbox \      # window manager (GTK dialogs need a WM to render properly)
+    xdotool \      # X11 input automation
+    imagemagick    # `import` for debugging screenshots
+```
+
+#### Troubleshooting System UI Capture
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Dialog opens but `waitForWindow` times out | `xdotool search --name` regex doesn't match | Iterate windows with `getwindowname` |
+| Dialog doesn't open at all | Playwright intercepted the click via protocol | Use `xdotool click` at OS level, not `page.click()` |
+| Click misses the button | `window.screenY` returns 0 in Playwright Firefox | Use Firefox-specific `mozInnerScreenX/Y` |
+| Ctrl+L types into the page | Dialog doesn't have keyboard focus | `xdotool windowactivate --sync $dialogId` first |
+| Test re-uses old dialog window ID | Window IDs are reused | Re-query `waitForWindow` for each open |
+
+---
+
 ## Approach 2 — CLI 2-Pass Pipeline (Terminal Demos)
 
 For CLI tools that run in a terminal (not a browser). Uses a narration-driven 2-pass pipeline:

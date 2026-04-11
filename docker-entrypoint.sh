@@ -32,7 +32,12 @@ done
 PULSE_SOCKET=$(pactl info 2>/dev/null | grep "Server String:" | awk '{print $3}')
 export PULSE_SERVER="unix:${PULSE_SOCKET}"
 
-echo "[demowright-docker] Xvfb :99 ready, PulseAudio ready (PULSE_SERVER=$PULSE_SERVER)"
+# Start fluxbox window manager (needed for system dialogs like file picker
+# to render and accept focus). Suppress its noisy "Failed to read" warnings.
+fluxbox 2>/dev/null &
+sleep 0.3
+
+echo "[demowright-docker] Xvfb :99 ready, fluxbox ready, PulseAudio ready (PULSE_SERVER=$PULSE_SERVER)"
 
 # Run the command passed to the container
 exec "$@"
