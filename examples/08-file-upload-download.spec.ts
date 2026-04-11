@@ -30,13 +30,6 @@ import { join } from "node:path";
 import { test, expect } from "@playwright/test";
 import { moveToEl, clickEl, hudWait, annotate, prefetchTts } from "../src/helpers.js";
 
-// Whether to use the system file picker via xdotool. Enabled when running
-// inside the Docker container which has Xvfb + xdotool available.
-const USE_SYSTEM_PICKER = !!process.env.DEMOWRIGHT_DOCKER && (() => {
-  try { execSync("which xdotool", { stdio: "pipe" }); return true; }
-  catch { return false; }
-})();
-
 const HTML = `<!DOCTYPE html>
 <html><head><title>08 File Manager</title><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -295,11 +288,15 @@ function gtkPickerEnterPath(path: string): void {
   execSync("xdotool key Return");
 }
 
-// When using system file picker, disable Playwright video — the outer ffmpeg
-// x11grab handles screen recording (Playwright video can't capture system UI).
-if (USE_SYSTEM_PICKER) {
-  test.use({ video: "off" });
-}
+// This example must run inside Docker (./docker-run.sh) so the GTK file
+// picker can be captured by ffmpeg x11grab. Skip outside Docker so a local
+// `playwright test` run doesn't overwrite the Docker-generated MP4 with a
+// shorter setInputFiles version that has no system UI visible.
+test.skip(!process.env.DEMOWRIGHT_DOCKER, "Run via ./docker-run.sh to capture the system file picker");
+
+// Disable Playwright's DOM-only video — the outer ffmpeg x11grab handles
+// screen recording (Playwright video can't see the OS file dialog).
+test.use({ video: "off" });
 
 let server: http.Server;
 let baseUrl: string;
@@ -314,10 +311,9 @@ test.beforeAll(async () => {
 test.afterAll(() => server?.close());
 
 test("file manager — system file picker via xdotool, downloads", async ({ browser }) => {
-  // When using xdotool/system picker, we don't need Playwright's video
-  // (the outer ffmpeg x11grab records the screen including the dialog).
+  // Playwright video is disabled (test.use({ video: "off" }) above) — the
+  // outer ffmpeg x11grab records the screen including the OS file dialog.
   const context = await browser.newContext({
-    recordVideo: USE_SYSTEM_PICKER ? undefined : { dir: "tmp/", size: { width: 1280, height: 720 } },
     viewport: { width: 1280, height: 720 },
     acceptDownloads: true,
   });
@@ -325,25 +321,15 @@ test("file manager — system file picker via xdotool, downloads", async ({ brow
 
   await page.goto(baseUrl);
 
-  const narrations = USE_SYSTEM_PICKER
-    ? [
-        "Welcome to the file manager demo. We'll upload files using the real native system file picker, captured via screen recording",
-        "Clicking the browse button. Watch as the native file chooser dialog opens — this is the actual operating system UI, not a web component",
-        "Now we'll type the file path directly using the GTK location entry, then press Enter to select it",
-        "The file appears in our list. Now let's download it back to verify the content",
-        "Downloaded successfully. Now let's upload another file the same way — through the native picker",
-        "Two files are now uploaded. Let's delete the first one to clean up",
-        "And that wraps up our demo — the system file picker was captured because we used screen recording, not Playwright's DOM-only video recorder",
-      ]
-    : [
-        "Welcome to the file manager demo. NOTE: this run uses Playwright's setInputFiles which bypasses the system picker. Run inside Docker to see the real native dialog",
-        "Uploading a text file via setInputFiles",
-        "File appears in the list. Downloading it back to verify",
-        "Downloaded successfully",
-        "Uploading another file",
-        "Deleting the first file",
-        "Demo complete",
-      ];
+  const narrations = [
+    "Welcome to the file manager demo. We'll upload files using the real native system file picker, captured via screen recording",
+    "Clicking the browse button. Watch as the native file chooser dialog opens — this is the actual operating system UI, not a web component",
+    "Now we'll type the file path directly using the GTK location entry, then press Enter to select it",
+    "The file appears in our list. Now let's download it back to verify the content",
+    "Downloaded successfully. Now let's upload another file the same way — through the native picker",
+    "Two files are now uploaded. Let's delete the first one to clean up",
+    "And that wraps up our demo — the system file picker was captured because we used screen recording, not Playwright's DOM-only video recorder",
+  ];
   await prefetchTts(page, narrations);
   await hudWait(page, 500);
 
@@ -351,32 +337,23 @@ test("file manager — system file picker via xdotool, downloads", async ({ brow
   await annotate(page, narrations[0]);
 
   // --- Upload file 1 ---
-  if (USE_SYSTEM_PICKER) {
-    await annotate(page, narrations[1], async () => {
-      await moveToEl(page, "#browse-btn");
-      await hudWait(page, 800);
-      // X11 click bypasses Playwright's filechooser intercept → native dialog opens
-      await xdoClick(page, "#browse-btn");
-      // Wait for the GTK "File Upload" dialog
-      const dialogWin = waitForWindow("File Upload");
-      if (!dialogWin) throw new Error("GTK file picker did not open");
-      // Activate the dialog so xdotool key sends go to it
-      execSync(`xdotool windowactivate --sync ${dialogWin}`);
-      await hudWait(page, 1500);
-    });
+  await annotate(page, narrations[1], async () => {
+    await moveToEl(page, "#browse-btn");
+    await hudWait(page, 800);
+    // X11 click bypasses Playwright's filechooser intercept → native dialog opens
+    await xdoClick(page, "#browse-btn");
+    // Wait for the GTK "File Upload" dialog
+    const dialogWin = waitForWindow("File Upload");
+    if (!dialogWin) throw new Error("GTK file picker did not open");
+    // Activate the dialog so xdotool key sends go to it
+    execSync(`xdotool windowactivate --sync ${dialogWin}`);
+    await hudWait(page, 2500); // give viewers time to see the dialog
+  });
 
-    await annotate(page, narrations[2], async () => {
-      gtkPickerEnterPath(sampleFile1);
-      await hudWait(page, 1500);
-    });
-  } else {
-    await annotate(page, narrations[1], async () => {
-      await moveToEl(page, "#browse-btn");
-      await hudWait(page, 500);
-      await page.locator("#file-input").setInputFiles(sampleFile1);
-      await hudWait(page, 1500);
-    });
-  }
+  await annotate(page, narrations[2], async () => {
+    gtkPickerEnterPath(sampleFile1);
+    await hudWait(page, 1500);
+  });
 
   // Wait for the file to actually appear (the GTK dialog dismissal is async)
   await page.waitForSelector(".file-item .file-name", { timeout: 10_000 });
@@ -400,27 +377,17 @@ test("file manager — system file picker via xdotool, downloads", async ({ brow
   expect(readFileSync(savedPath, "utf-8")).toBe(readFileSync(sampleFile1, "utf-8"));
 
   // --- Upload file 2 ---
-  if (USE_SYSTEM_PICKER) {
-    await annotate(page, narrations[4], async () => {
-      await moveToEl(page, "#browse-btn");
-      await hudWait(page, 800);
-      await xdoClick(page, "#browse-btn");
-      const dialogWin = waitForWindow("File Upload");
-      if (!dialogWin) throw new Error("GTK file picker did not open");
-      // Activate the dialog so xdotool key sends go to it
-      execSync(`xdotool windowactivate --sync ${dialogWin}`);
-      await hudWait(page, 1000);
-      gtkPickerEnterPath(sampleFile2);
-      await hudWait(page, 1500);
-    });
-  } else {
-    await annotate(page, narrations[4], async () => {
-      await moveToEl(page, "#browse-btn");
-      await hudWait(page, 500);
-      await page.locator("#file-input").setInputFiles(sampleFile2);
-      await hudWait(page, 1500);
-    });
-  }
+  await annotate(page, narrations[4], async () => {
+    await moveToEl(page, "#browse-btn");
+    await hudWait(page, 800);
+    await xdoClick(page, "#browse-btn");
+    const dialogWin = waitForWindow("File Upload");
+    if (!dialogWin) throw new Error("GTK file picker did not open");
+    execSync(`xdotool windowactivate --sync ${dialogWin}`);
+    await hudWait(page, 2000); // give viewers time to see the dialog
+    gtkPickerEnterPath(sampleFile2);
+    await hudWait(page, 1500);
+  });
 
   await page.waitForFunction(() => document.querySelectorAll(".file-item").length === 2, null, { timeout: 10_000 });
   const fileItems = await page.locator(".file-item").count();
