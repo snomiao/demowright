@@ -85,8 +85,7 @@ Use `bun` — never `npm`. Install deps with `bun i`, run scripts with `bun run`
 | 02 | `examples/02-keyboard-demo.spec.ts` | Monaco Editor — real typing, Ctrl+S/Z/A, tab switching |
 | 03 | `examples/03-form-interaction.spec.ts` | E-commerce checkout with narrated segments |
 | 04 | `examples/04-narrated-tour.spec.ts` | SaaS landing page tour — heavy `.segment()` usage |
-| 05 | `examples/05-kanban-board.spec.ts` | Kanban board — card selection, moving, adding tasks |
+| 05 | `examples/05-kanban-board.spec.ts` | Kanban board — drag-and-drop cards between columns |
 | 06 | `examples/06-native-api.spec.ts` | Native Playwright API — zero helpers, auto-delay only |
 | 07 | `examples/07-video-player.spec.ts` | Video player — play, pause, seek, media keys, audio |
-| 08 | `examples/08-narration-plan.spec.ts` | Narration-driven tour — pre-gen TTS, `pace()` timing |
-| 09 | `examples/09-video-script.spec.ts` | Full production — title, segments, transitions, SRT, outro |
+| 08 | `examples/08-file-upload-download.spec.ts` | File manager — upload via setInputFiles, download capture |

@@ -1,11 +1,11 @@
 /**
- * Example 5: Kanban board interaction
- * Full HUD demo — cursor moves between columns, clicks cards to select them,
- * clicks column headers to move cards, adds a new task via inline input.
+ * Example 5: Kanban board with drag-and-drop
+ * Full HUD demo — cursor drags cards between columns with visible
+ * drag ghost, drop-zone highlights, and smooth animations.
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
-import { moveToEl, clickEl, typeKeys } from "../src/helpers.js";
+import { moveToEl, clickEl, typeKeys, moveTo } from "../src/helpers.js";
 import { createVideoScript } from "../src/video-script.js";
 
 const HTML = `<!DOCTYPE html>
@@ -26,7 +26,10 @@ const HTML = `<!DOCTYPE html>
   .card { background: #1a1a3e; border: 1px solid #333366; border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.25s ease; position: relative; }
   .card:hover { border-color: #5555aa; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
   .card.selected { border-color: #ffcc00; box-shadow: 0 0 0 2px rgba(255,204,0,0.3), 0 4px 12px rgba(0,0,0,0.3); }
+  .card.dragging { opacity: 0.4; transform: scale(0.95); }
   .card.moving { opacity: 0; transform: scale(0.9); }
+  .column.drag-over { background: #1e1e50; }
+  .column.drag-over .column-header { background: #2a2a5e; box-shadow: inset 0 0 0 2px #ffcc00; }
   .card .card-title { color: #fff; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
   .card .card-meta { display: flex; align-items: center; gap: 8px; }
   .priority { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
@@ -86,8 +89,6 @@ const HTML = `<!DOCTYPE html>
   </div>
   <div class="toast" id="toast"></div>
   <script>
-    let selectedCard = null;
-
     function updateCounts() {
       document.getElementById('count-todo').textContent = document.querySelectorAll('#body-todo .card').length;
       document.getElementById('count-progress').textContent = document.querySelectorAll('#body-progress .card').length;
@@ -101,51 +102,59 @@ const HTML = `<!DOCTYPE html>
       setTimeout(() => t.classList.remove('show'), 2000);
     }
 
-    // Click a card to select it
-    document.querySelectorAll('.card').forEach(card => {
-      card.addEventListener('click', () => {
-        if (selectedCard === card) {
-          card.classList.remove('selected');
-          selectedCard = null;
-          document.querySelectorAll('.column-header').forEach(h => h.classList.remove('drop-target'));
-          return;
+    // --- Drag and Drop ---
+    function makeCardDraggable(card) {
+      card.setAttribute('draggable', 'true');
+
+      card.addEventListener('dragstart', (e) => {
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.id);
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        document.querySelectorAll('.column').forEach(c => c.classList.remove('drag-over'));
+      });
+    }
+
+    document.querySelectorAll('.card').forEach(makeCardDraggable);
+
+    // Column drop zones
+    document.querySelectorAll('.column').forEach(col => {
+      col.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        col.classList.add('drag-over');
+      });
+
+      col.addEventListener('dragleave', (e) => {
+        if (!col.contains(e.relatedTarget)) {
+          col.classList.remove('drag-over');
         }
-        if (selectedCard) selectedCard.classList.remove('selected');
-        selectedCard = card;
-        card.classList.add('selected');
-        // Highlight other column headers as drop targets
-        document.querySelectorAll('.column-header').forEach(h => {
-          if (h.dataset.col !== card.dataset.col) {
-            h.classList.add('drop-target');
-          } else {
-            h.classList.remove('drop-target');
-          }
-        });
       });
-    });
 
-    // Click a column header to move the selected card there
-    document.querySelectorAll('.column-header').forEach(header => {
-      header.addEventListener('click', () => {
-        if (!selectedCard) return;
-        const targetCol = header.dataset.col;
-        if (selectedCard.dataset.col === targetCol) return;
+      col.addEventListener('drop', (e) => {
+        e.preventDefault();
+        col.classList.remove('drag-over');
+        const cardId = e.dataTransfer.getData('text/plain');
+        const card = document.getElementById(cardId);
+        if (!card) return;
 
-        const bodyId = 'body-' + targetCol;
-        const targetBody = document.getElementById(bodyId);
-        const cardTitle = selectedCard.querySelector('.card-title').textContent;
+        const targetBody = col.querySelector('.column-body');
+        const targetCol = col.querySelector('.column-header').dataset.col;
+        if (card.dataset.col === targetCol) return;
 
-        selectedCard.dataset.col = targetCol;
-        targetBody.appendChild(selectedCard);
-        selectedCard.classList.remove('selected');
-        selectedCard = null;
-        document.querySelectorAll('.column-header').forEach(h => h.classList.remove('drop-target'));
+        const cardTitle = card.querySelector('.card-title').textContent;
+        card.dataset.col = targetCol;
+        targetBody.appendChild(card);
+        card.classList.remove('dragging');
         updateCounts();
-        showToast('Moved "' + cardTitle + '" → ' + header.querySelector('h3').textContent);
+        showToast('Moved "' + cardTitle + '" → ' + col.querySelector('.column-header h3').textContent);
       });
     });
 
-    // Add task
+    // --- Add task ---
     document.getElementById('add-task-btn').addEventListener('click', () => {
       document.getElementById('add-task-btn').style.display = 'none';
       document.getElementById('add-input').classList.add('show');
@@ -163,25 +172,10 @@ const HTML = `<!DOCTYPE html>
         card.style.opacity = '0';
         card.style.transform = 'translateY(-10px)';
         document.getElementById('body-todo').appendChild(card);
+        makeCardDraggable(card);
         requestAnimationFrame(() => {
           card.style.opacity = '1';
           card.style.transform = 'translateY(0)';
-        });
-        // Make new card clickable
-        card.addEventListener('click', () => {
-          if (selectedCard === card) {
-            card.classList.remove('selected');
-            selectedCard = null;
-            document.querySelectorAll('.column-header').forEach(h => h.classList.remove('drop-target'));
-            return;
-          }
-          if (selectedCard) selectedCard.classList.remove('selected');
-          selectedCard = card;
-          card.classList.add('selected');
-          document.querySelectorAll('.column-header').forEach(h => {
-            if (h.dataset.col !== card.dataset.col) h.classList.add('drop-target');
-            else h.classList.remove('drop-target');
-          });
         });
         e.target.value = '';
         document.getElementById('add-input').classList.remove('show');
@@ -205,7 +199,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => server?.close());
 
-test("kanban board — move cards between columns, add a task", async ({ page }) => {
+test("kanban board — drag cards between columns, add a task", async ({ page }) => {
   const plan = createVideoScript()
     .segment(
       "Welcome to our sprint board. Let's review all the columns and cards before we start organizing the work.",
@@ -243,20 +237,20 @@ test("kanban board — move cards between columns, add a task", async ({ page })
       },
     )
     .segment(
-      "Let's move the CI pipeline task from To Do into In Progress. We select the card, then click the target column header.",
+      "Let's drag the CI pipeline task from To Do into In Progress. Watch the card as we pick it up and drop it into the target column.",
       async (pace) => {
-        await clickEl(page, "#card-1");
+        await moveToEl(page, "#card-1");
         await pace();
-        await clickEl(page, "#header-progress");
+        await page.locator("#card-1").dragTo(page.locator("#body-progress"));
         await pace();
       },
     )
     .segment(
-      "Next we'll move the dashboard widgets task from In Progress over to Done, since that work is now complete.",
+      "Next we'll drag the dashboard widgets task from In Progress over to Done, since that work is now complete.",
       async (pace) => {
-        await clickEl(page, "#card-5");
+        await moveToEl(page, "#card-5");
         await pace();
-        await clickEl(page, "#header-done");
+        await page.locator("#card-5").dragTo(page.locator("#body-done"));
         await pace();
       },
     )
@@ -278,7 +272,16 @@ test("kanban board — move cards between columns, add a task", async ({ page })
       },
     )
     .segment(
-      "And that's it — our sprint board is now fully organized. Tasks have been moved and a new item has been added successfully.",
+      "Now let's drag our new task from To Do into In Progress to start working on it right away.",
+      async (pace) => {
+        await moveToEl(page, "#card-new");
+        await pace();
+        await page.locator("#card-new").dragTo(page.locator("#body-progress"));
+        await pace();
+      },
+    )
+    .segment(
+      "And that's it — our sprint board is fully organized using drag and drop. Cards moved smoothly between columns.",
     );
 
   await page.goto(baseUrl);
@@ -292,20 +295,23 @@ test("kanban board — move cards between columns, add a task", async ({ page })
   }
   console.log(`  Total: ${result.totalMs.toFixed(0)}ms`);
 
+  // card-1: To Do → In Progress
   const card1Col = await page.evaluate(() => document.getElementById("card-1")?.closest(".column")?.id);
   expect(card1Col).toBe("col-progress");
 
+  // card-5: In Progress → Done
   const card5Col = await page.evaluate(() => document.getElementById("card-5")?.closest(".column")?.id);
   expect(card5Col).toBe("col-done");
 
+  // card-new: To Do → In Progress (dragged after add)
   const newCardCol = await page.evaluate(() => document.getElementById("card-new")?.closest(".column")?.id);
-  expect(newCardCol).toBe("col-todo");
+  expect(newCardCol).toBe("col-progress");
 
   const todoCt = await page.evaluate(() => document.getElementById("count-todo")?.textContent);
-  expect(todoCt).toBe("3");
+  expect(todoCt).toBe("2");
 
   const progressCt = await page.evaluate(() => document.getElementById("count-progress")?.textContent);
-  expect(progressCt).toBe("2");
+  expect(progressCt).toBe("3");
 
   const doneCt = await page.evaluate(() => document.getElementById("count-done")?.textContent);
   expect(doneCt).toBe("3");
