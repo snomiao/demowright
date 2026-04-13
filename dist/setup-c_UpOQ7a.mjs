@@ -734,8 +734,8 @@ function buildAndSaveAudioTrack(segments, outputPath, contextStartMs, browserAud
 function finalizeRenderJob(job, videoPaths) {
 	for (const videoPath of videoPaths) try {
 		if (!existsSync(videoPath)) continue;
-		// Compute trim: video starts at page creation, audio at script.render().
-		// Probe video duration, subtract audio duration (job.totalMs) to find the gap.
+		// Compute -ss trim: video starts at context creation, audio at render start.
+		// The gap (page.goto + waitForTimeout + prepare) should be trimmed.
 		let trimSec = 0;
 		try {
 			const probeOut = execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${videoPath}"`, { stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
