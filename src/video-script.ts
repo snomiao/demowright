@@ -792,3 +792,60 @@ class VideoScriptImpl {
 export function createVideoScript(): VideoScriptImpl {
   return new VideoScriptImpl();
 }
+
+/**
+ * Show a persistent title card overlay — useful for covering setup/loading.
+ * Unlike the title step in createVideoScript(), this does NOT auto-remove.
+ * Call `hideTitleCard(page)` to remove it before starting the video script.
+ */
+export async function showTitleCard(
+  page: Page,
+  text: string,
+  opts?: { subtitle?: string; background?: string },
+): Promise<void> {
+  const bg = opts?.background ?? DEFAULT_BG;
+  await page.evaluate(
+    ([t, sub, bgVal]: [string, string | undefined, string]) => {
+      // Remove existing card if any
+      document.getElementById("qa-vs-card-persistent")?.remove();
+
+      const overlay = document.createElement("div");
+      overlay.id = "qa-vs-card-persistent";
+      overlay.style.cssText = [
+        "position:fixed",
+        "inset:0",
+        `background:${bgVal}`,
+        "display:flex",
+        "flex-direction:column",
+        "align-items:center",
+        "justify-content:center",
+        "z-index:2147483647",
+        "pointer-events:none",
+      ].join(";");
+
+      const h = document.createElement("div");
+      h.textContent = t;
+      h.style.cssText = "font-family:'Segoe UI',system-ui,sans-serif;font-size:48px;font-weight:800;color:#fff;text-align:center;max-width:80vw;line-height:1.2;text-shadow:0 2px 20px rgba(0,0,0,0.5);";
+      overlay.appendChild(h);
+
+      if (sub) {
+        const s = document.createElement("div");
+        s.textContent = sub;
+        s.style.cssText = "font-family:'Segoe UI',system-ui,sans-serif;font-size:22px;font-weight:400;color:rgba(255,255,255,0.7);margin-top:16px;text-align:center;max-width:70vw;";
+        overlay.appendChild(s);
+      }
+
+      document.body.appendChild(overlay);
+    },
+    [text, opts?.subtitle, bg] as [string, string | undefined, string],
+  );
+}
+
+/**
+ * Remove the persistent title card overlay shown by `showTitleCard()`.
+ */
+export async function hideTitleCard(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document.getElementById("qa-vs-card-persistent")?.remove();
+  });
+}
