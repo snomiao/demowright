@@ -793,10 +793,46 @@ export function createVideoScript(): VideoScriptImpl {
   return new VideoScriptImpl();
 }
 
+// WeakMap to track load handlers so hideTitleCard can unregister them
+const titleCardHandlers = new WeakMap<Page, () => void>();
+
+// Browser-side injection function (serialized via page.evaluate)
+function injectTitleCard([t, sub, bgVal]: [string, string | undefined, string]) {
+  document.getElementById("qa-vs-card-persistent")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "qa-vs-card-persistent";
+  overlay.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    `background:${bgVal}`,
+    "display:flex",
+    "flex-direction:column",
+    "align-items:center",
+    "justify-content:center",
+    "z-index:2147483647",
+    "pointer-events:none",
+  ].join(";");
+
+  const h = document.createElement("div");
+  h.textContent = t;
+  h.style.cssText = "font-family:'Segoe UI',system-ui,sans-serif;font-size:48px;font-weight:800;color:#fff;text-align:center;max-width:80vw;line-height:1.2;text-shadow:0 2px 20px rgba(0,0,0,0.5);";
+  overlay.appendChild(h);
+
+  if (sub) {
+    const s = document.createElement("div");
+    s.textContent = sub;
+    s.style.cssText = "font-family:'Segoe UI',system-ui,sans-serif;font-size:22px;font-weight:400;color:rgba(255,255,255,0.7);margin-top:16px;text-align:center;max-width:70vw;";
+    overlay.appendChild(s);
+  }
+
+  document.body.appendChild(overlay);
+}
+
 /**
  * Show a persistent title card overlay — useful for covering setup/loading.
  * Unlike the title step in createVideoScript(), this does NOT auto-remove.
- * Call `hideTitleCard(page)` to remove it before starting the video script.
+ * Survives page navigations; call `hideTitleCard(page)` to remove it.
  */
 export async function showTitleCard(
   page: Page,
@@ -804,47 +840,33 @@ export async function showTitleCard(
   opts?: { subtitle?: string; background?: string },
 ): Promise<void> {
   const bg = opts?.background ?? DEFAULT_BG;
-  await page.evaluate(
-    ([t, sub, bgVal]: [string, string | undefined, string]) => {
-      // Remove existing card if any
-      document.getElementById("qa-vs-card-persistent")?.remove();
+  const args: [string, string | undefined, string] = [text, opts?.subtitle, bg];
 
-      const overlay = document.createElement("div");
-      overlay.id = "qa-vs-card-persistent";
-      overlay.style.cssText = [
-        "position:fixed",
-        "inset:0",
-        `background:${bgVal}`,
-        "display:flex",
-        "flex-direction:column",
-        "align-items:center",
-        "justify-content:center",
-        "z-index:2147483647",
-        "pointer-events:none",
-      ].join(";");
+  // Remove any previous handler before registering a new one
+  const prev = titleCardHandlers.get(page);
+  if (prev) page.off("load", prev);
 
-      const h = document.createElement("div");
-      h.textContent = t;
-      h.style.cssText = "font-family:'Segoe UI',system-ui,sans-serif;font-size:48px;font-weight:800;color:#fff;text-align:center;max-width:80vw;line-height:1.2;text-shadow:0 2px 20px rgba(0,0,0,0.5);";
-      overlay.appendChild(h);
+  // Re-inject the card after every navigation
+  const onLoad = () => {
+    page.evaluate(injectTitleCard, args).catch(() => {});
+  };
+  titleCardHandlers.set(page, onLoad);
+  page.on("load", onLoad);
 
-      if (sub) {
-        const s = document.createElement("div");
-        s.textContent = sub;
-        s.style.cssText = "font-family:'Segoe UI',system-ui,sans-serif;font-size:22px;font-weight:400;color:rgba(255,255,255,0.7);margin-top:16px;text-align:center;max-width:70vw;";
-        overlay.appendChild(s);
-      }
-
-      document.body.appendChild(overlay);
-    },
-    [text, opts?.subtitle, bg] as [string, string | undefined, string],
-  );
+  // Inject immediately (non-blocking — avoids hanging on slow pages)
+  page.evaluate(injectTitleCard, args).catch(() => {});
 }
 
 /**
  * Remove the persistent title card overlay shown by `showTitleCard()`.
  */
 export async function hideTitleCard(page: Page): Promise<void> {
+  // Stop re-injecting on future navigations
+  const handler = titleCardHandlers.get(page);
+  if (handler) {
+    page.off("load", handler);
+    titleCardHandlers.delete(page);
+  }
   await page.evaluate(() => {
     document.getElementById("qa-vs-card-persistent")?.remove();
   });
