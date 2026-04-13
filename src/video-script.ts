@@ -867,7 +867,14 @@ export async function hideTitleCard(page: Page): Promise<void> {
     page.off("load", handler);
     titleCardHandlers.delete(page);
   }
-  await page.evaluate(() => {
-    document.getElementById("qa-vs-card-persistent")?.remove();
-  });
+
+  if (page.isClosed()) return;
+
+  try {
+    await page.evaluate(() => {
+      document.getElementById("qa-vs-card-persistent")?.remove();
+    });
+  } catch {
+    // Best-effort cleanup: page may have closed, crashed, or navigated.
+  }
 }
