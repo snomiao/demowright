@@ -82,16 +82,16 @@ function domInjector(opts) {
     [data-qa-hud] * { pointer-events: none !important; }
     .qa-cursor {
       position: fixed; top: 0; left: 0;
-      width: 20px; height: 20px;
+      width: 48px; height: 48px;
       pointer-events: none; z-index: 2147483647;
       transition: transform 0.02s linear;
       will-change: transform;
       display: ${opts.cursor ? "block" : "none"};
     }
-    .qa-cursor svg { width: 20px; height: 20px; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.5)); }
+    .qa-cursor svg { width: 48px; height: 48px; filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.8)) drop-shadow(0 0 8px rgba(0,0,0,0.4)); }
     .qa-cursor.clicking svg { transform: scale(0.85); }
     .qa-ripple {
-      position: fixed; width: 20px; height: 20px;
+      position: fixed; width: 48px; height: 48px;
       border-radius: 50%; border: 2px solid rgba(255, 60, 60, 0.8);
       pointer-events: none;
       animation: qa-ripple-anim 0.5s ease-out forwards;
