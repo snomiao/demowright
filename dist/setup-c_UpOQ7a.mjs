@@ -734,18 +734,6 @@ function buildAndSaveAudioTrack(segments, outputPath, contextStartMs, browserAud
 function finalizeRenderJob(job, videoPaths) {
 	for (const videoPath of videoPaths) try {
 		if (!existsSync(videoPath)) continue;
-		// Compute -ss trim: video starts at context creation, audio at render start.
-		// The gap (page.goto + waitForTimeout + prepare) should be trimmed.
-		let trimSec = 0;
-		try {
-			const probeOut = execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${videoPath}"`, { stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
-			const videoDur = parseFloat(probeOut) || 0;
-			const audioDur = job.totalMs / 1e3;
-			if (videoDur > 0 && audioDur > 0 && videoDur > audioDur + 0.5) {
-				trimSec = videoDur - audioDur;
-			}
-		} catch {}
-		const ssArg = trimSec > 0.5 ? `-ss ${trimSec.toFixed(3)}` : "";
 		const filters = [];
 		const transitions = job.timeline.filter((e) => e.kind === "transition");
 		for (const t of transitions) {
@@ -763,7 +751,6 @@ function finalizeRenderJob(job, videoPaths) {
 		const chapterArgs = existsSync(job.chaptersPath) ? `-i "${job.chaptersPath}" -map_metadata 2` : "";
 		execSync([
 			`ffmpeg -y`,
-			ssArg,
 			`-i "${videoPath}"`,
 			`-i "${job.wavPath}"`,
 			chapterArgs,

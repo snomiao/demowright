@@ -56,7 +56,7 @@ export {
 export { installAutoAnnotate } from "./auto-annotate.js";
 
 // Video script — narration-driven video production (title cards, segments, transitions, SRT, chapters)
-export { createVideoScript, buildFfmpegCommand } from "./video-script.js";
+export { createVideoScript, buildFfmpegCommand, showTitleCard, hideTitleCard } from "./video-script.js";
 export type { VideoScriptResult, TimelineEntry, PaceFn, TitleOptions, OutroOptions, RenderOptions } from "./video-script.js";
 export { getGlobalTtsProvider } from "./hud-registry.js";
 
