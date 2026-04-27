@@ -523,6 +523,15 @@ function buildAndSaveAudioTrack(
  * Finalize a video render job: run ffmpeg with the actual video path,
  * applying fade transitions, subtitle burn-in, and chapter metadata.
  */
+function probeVideoDuration(filePath: string): number {
+  try {
+    const out = execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${filePath}"`, { stdio: ["ignore", "pipe", "ignore"] });
+    return parseFloat(out.toString()) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function finalizeRenderJob(
   job: import("./hud-registry.js").VideoRenderJob,
   videoPaths: string[],
@@ -530,6 +539,18 @@ function finalizeRenderJob(
   for (const videoPath of videoPaths) {
     try {
       if (!existsSync(videoPath)) continue;
+
+      // Compute trim offset: video starts at page creation, audio starts at render() start.
+      // Trim = videoDur - audioDur to skip the silent lead-in before render() began.
+      let ssArgs = "";
+      if (existsSync(job.wavPath)) {
+        const videoDur = probeVideoDuration(videoPath);
+        const audioDur = probeVideoDuration(job.wavPath);
+        if (videoDur > 0 && audioDur > 0 && videoDur > audioDur + 0.5) {
+          const trimSec = (videoDur - audioDur).toFixed(3);
+          ssArgs = `-ss ${trimSec}`;
+        }
+      }
 
       // Build video filter chain
       const filters: string[] = [];
@@ -559,6 +580,7 @@ function finalizeRenderJob(
 
       const cmd = [
         `ffmpeg -y`,
+        ssArgs,
         `-i "${videoPath}"`,
         `-i "${job.wavPath}"`,
         chapterArgs,
