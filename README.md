@@ -164,6 +164,12 @@ await applyHud(context, {
 });
 ```
 
+> **No provider, no audio.** Without a TTS provider, `narrate()` falls back to the
+> browser's `speechSynthesis`, which is never captured in recordings and is silent in
+> headless Chromium (the CI default). demowright prints a warning when this happens.
+> With `withDemowright()`, a `GEMINI_API_KEY` in the environment, `.env.local` or `.env`
+> enables Gemini TTS automatically; otherwise installing `espeak-ng` gives a free offline voice.
+
 ## How It Works
 
 1. **Event listeners** are injected via `context.addInitScript()` — captures mouse/keyboard events before DOM exists, survives navigations
