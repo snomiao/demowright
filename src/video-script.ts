@@ -441,6 +441,9 @@ function buildWavTrack(
 // VideoScript
 // ---------------------------------------------------------------------------
 
+/** Overruns shorter than this are normal jitter and aren't reported. */
+const OVERRUN_WARN_MS = 1000;
+
 const DEFAULT_BG = "radial-gradient(ellipse at 50% 40%, #1a1a3e 0%, #0b0b1a 100%)";
 
 class VideoScriptImpl {
@@ -763,6 +766,14 @@ class VideoScriptImpl {
         const elapsed = Date.now() - stepStartMs;
         const remaining = targetMs - elapsed;
         const overrunMs = Math.max(0, -remaining);
+        if (active && segment && overrunMs > OVERRUN_WARN_MS) {
+          console.warn(
+            `[demowright] ⚠ Segment "${step.text.slice(0, 60)}" overran its narration by ${(overrunMs / 1000).toFixed(1)}s` +
+              ` — the video will have a ${(overrunMs / 1000).toFixed(1)}s silent gap.\n` +
+              `  Move navigation/waits into the segment's setup callback (runs before narration starts),` +
+              ` or split the action across more segments.`,
+          );
+        }
         if (remaining > 50 && active) {
           await page.waitForTimeout(remaining);
         }
