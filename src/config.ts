@@ -49,6 +49,9 @@ export function withDemowright(
   if (!existing.includes(flag)) {
     process.env.NODE_OPTIONS = existing ? `${existing} ${flag}` : flag;
   }
+  // Bun ignores NODE_OPTIONS --require. The config is evaluated in every
+  // worker, so load the preload here instead.
+  if (process.versions.bun) require(registerPath);
 
   // When audio capture is enabled, force headed mode so the browser
   // outputs audio to PulseAudio (headless mode produces no audio).
