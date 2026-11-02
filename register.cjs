@@ -72,9 +72,10 @@ if (process.env.QA_HUD === "0") {
         applyHudCache = mod.applyHud;
       }
       const ttsUrl = process.env.QA_HUD_TTS || false;
-      let tts = ttsUrl;
+      // URL template from env, else a function provider set by withDemowright()
+      let tts = ttsUrl || (typeof g.__qaHudGlobal.tts === "function" ? g.__qaHudGlobal.tts : false);
       // Built-in Gemini TTS provider
-      if (process.env.GEMINI_API_KEY && !ttsUrl) {
+      if (process.env.GEMINI_API_KEY && !tts) {
         const apiKey = process.env.GEMINI_API_KEY;
         tts = async function geminiTts(text) {
           const res = await fetch(

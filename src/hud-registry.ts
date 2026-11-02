@@ -74,6 +74,15 @@ export function getTtsProvider(page: Page): TtsProvider {
 }
 
 /**
+ * Set the process-global TTS provider. Used by withDemowright() for function
+ * providers, which can't be forwarded to workers through env vars — Playwright
+ * re-evaluates the config in every worker, so this runs there too.
+ */
+export function setGlobalTtsProvider(tts: TtsProvider): void {
+  g.__qaHudGlobal.tts = tts;
+}
+
+/**
  * Get the global TTS provider (set by register.cjs or applyHud).
  * Useful for pre-generating audio before a page/context exists.
  */
