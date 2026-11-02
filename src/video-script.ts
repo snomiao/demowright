@@ -383,18 +383,18 @@ function buildWavTrack(
 ): Buffer | null {
   if (segments.length === 0) return null;
 
-  const anySeg = segments[0];
-  const { sampleRate } = parseWav(anySeg.wavBuf);
-  const channels = 2;
+  const parsedSegs = segments.map((seg) => ({ offsetMs: seg.offsetMs, ...parseWav(seg.wavBuf) }));
+  const { sampleRate } = parsedSegs[0];
+  // TTS narration is usually mono — keep it mono so the track is half the size
+  const channels = parsedSegs.some((p) => p.channels > 1) ? 2 : 1;
 
-  const totalSamples = Math.ceil((totalMs / 1000) * sampleRate * channels);
+  const totalSamples = Math.ceil((totalMs / 1000) * sampleRate) * channels;
   const trackBuffer = new Float32Array(totalSamples);
 
-  for (const seg of segments) {
-    const parsed = parseWav(seg.wavBuf);
-    const offsetSamples = Math.floor((seg.offsetMs / 1000) * sampleRate) * channels;
+  for (const parsed of parsedSegs) {
+    const offsetSamples = Math.floor((parsed.offsetMs / 1000) * sampleRate) * channels;
 
-    const stereo = parsed.channels === 1
+    const samples = parsed.channels === 1 && channels === 2
       ? (() => {
           const s = new Float32Array(parsed.sampleCount * 2);
           for (let i = 0; i < parsed.sampleCount; i++) {
@@ -405,8 +405,8 @@ function buildWavTrack(
         })()
       : parsed.float32;
 
-    for (let i = 0; i < stereo.length && offsetSamples + i < trackBuffer.length; i++) {
-      trackBuffer[offsetSamples + i] += stereo[i];
+    for (let i = 0; i < samples.length && offsetSamples + i < trackBuffer.length; i++) {
+      trackBuffer[offsetSamples + i] += samples[i];
     }
   }
 
