@@ -7,7 +7,7 @@
  *   import { narrate, clickEl, typeKeys, caption, hudWait } from 'demowright/helpers';
  */
 import type { Page } from "@playwright/test";
-import { isHudActive, getTtsProvider, storeAudioSegment } from "./hud-registry.js";
+import { isHudActive, getTtsProvider, storeAudioSegment, warnNoTtsProvider } from "./hud-registry.js";
 
 // ---------------------------------------------------------------------------
 // evaluateWithTimeout — page.evaluate that won't hang on blocked event loops
@@ -355,12 +355,14 @@ export async function narrate(
         await playTtsAudio(page, wavBuf);
       }
       return;
-    } catch {
+    } catch (e: any) {
       // Provider failed — fall through to speechSynthesis
+      console.warn(`[demowright] TTS provider failed for "${text.slice(0, 40)}": ${e?.message ?? e}`);
     }
   }
 
   // Fallback: browser speechSynthesis (works in headed Chromium, not headless)
+  if (!provider) warnNoTtsProvider("narrate()");
   const opts = {
     rate: options?.rate ?? 1,
     pitch: options?.pitch ?? 1,

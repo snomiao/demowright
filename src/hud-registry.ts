@@ -156,3 +156,17 @@ export function getRenderJob(page: Page): VideoRenderJob | undefined {
   if (pageId) return g.__qaHudGlobal.renderJobs?.get(pageId);
   return undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Missing-TTS warning — once per process, shared across module instances
+// ---------------------------------------------------------------------------
+
+export function warnNoTtsProvider(where: string): void {
+  if (g.__qaHudGlobal.warnedNoTts) return;
+  g.__qaHudGlobal.warnedNoTts = true;
+  console.warn(
+    `[demowright] ⚠ ${where}: no TTS provider configured — the recorded video will have no narration audio.\n` +
+      `  Browser speechSynthesis is never captured in recordings and is silent in headless Chromium.\n` +
+      `  Set GEMINI_API_KEY (env or .env.local), install espeak-ng, or pass \`tts\` to withDemowright()/applyHud().`,
+  );
+}

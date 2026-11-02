@@ -26,7 +26,7 @@
 import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { isHudActive, getTtsProvider, getGlobalTtsProvider, getGlobalOutputDir, storeAudioSegment, storeRenderJob } from "./hud-registry.js";
+import { isHudActive, getTtsProvider, getGlobalTtsProvider, getGlobalOutputDir, storeAudioSegment, storeRenderJob, warnNoTtsProvider } from "./hud-registry.js";
 
 // ---------------------------------------------------------------------------
 // TTS internals (shared with narration-plan.ts)
@@ -662,6 +662,9 @@ class VideoScriptImpl {
 
     if (this.prepared.size === 0 && active && provider) {
       await this.prepare(page);
+    }
+    if (active && !provider && this.steps.some((s) => s.kind === "segment")) {
+      warnNoTtsProvider("createVideoScript()");
     }
 
     let segIdx = 0;

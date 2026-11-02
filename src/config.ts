@@ -10,7 +10,7 @@
  * into every BrowserContext automatically. No test file changes needed.
  */
 import { createRequire } from "node:module";
-import { readdirSync, mkdirSync } from "node:fs";
+import { readdirSync, mkdirSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { PlaywrightTestConfig } from "@playwright/test";
@@ -23,6 +23,7 @@ export function withDemowright(
   options?: Partial<QaHudOptions>,
 ): PlaywrightTestConfig {
   const opts = { ...defaultOptions, ...options };
+  loadGeminiKeyFromDotenv();
 
   // Resolve the CJS register script path
   const require = createRequire(import.meta.url);
@@ -74,6 +75,26 @@ export function withDemowright(
   }
 
   return config;
+}
+
+/**
+ * register.cjs enables Gemini TTS when GEMINI_API_KEY is set. Bun loads
+ * .env.local automatically but Node doesn't, so read just that key from
+ * .env.local / .env in the project root when it isn't already in the env.
+ */
+function loadGeminiKeyFromDotenv(): void {
+  if (process.env.GEMINI_API_KEY) return;
+  for (const file of [".env.local", ".env"]) {
+    try {
+      const text = readFileSync(join(process.cwd(), file), "utf-8");
+      const m = text.match(/^\s*(?:export\s+)?GEMINI_API_KEY\s*=\s*(.*)$/m);
+      const value = m?.[1].replace(/\s+#.*$/, "").trim().replace(/^(['"])(.*)\1$/, "$2");
+      if (value) {
+        process.env.GEMINI_API_KEY = value;
+        return;
+      }
+    } catch {}
+  }
 }
 
 /**
