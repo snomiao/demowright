@@ -38,7 +38,7 @@ register.cjs          # CJS preload for NODE_OPTIONS approach
 
 ```bash
 bun run build          # tsdown → dist/
-bun run typecheck      # tsgo --noEmit
+bun run typecheck      # tsrs --noEmit
 bun run lint           # oxlint src
 bun test               # runs tests/ with main playwright.config.ts
 bunx playwright test --config examples/playwright.config.ts  # run all examples
