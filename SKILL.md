@@ -126,6 +126,19 @@ const result = await script.run(page);
 // → auto-renders MP4 with transitions, burned subtitles, chapter metadata
 ```
 
+**Keep segment actions shorter than their narration.** Audio is placed at each
+segment's wall-clock start, so an action that runs past its narration (slow
+`goto`, `waitForLoadState`, network waits) leaves a silent gap of the same
+length — demowright warns with `Segment "…" overran its narration by Ns`.
+Put heavy work in the segment's `setup`, which runs *before* the narration starts:
+
+```ts
+script.segment("This is the docs page", {
+  setup: async () => { await page.goto(docsUrl, { waitUntil: "networkidle" }); },
+  action: async (pace) => { await moveToEl(page, "h1"); await pace(); },
+});
+```
+
 ### Drag-and-drop
 
 ```ts
