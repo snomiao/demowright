@@ -16,6 +16,8 @@ function audioCaptureMain() {
   (window as any).__qaHudAudioCapture = true;
 
   const BUFFER_SIZE = 4096;
+  // ~-80 dBFS; below this a buffer is treated as silence and not forwarded
+  const SILENCE_THRESHOLD = 1e-4;
 
   // Immediately patch AudioNode.prototype.connect BEFORE any AudioContext is created.
   // We'll intercept connections to any AudioDestinationNode and insert our tap.
@@ -42,6 +44,18 @@ function audioCaptureMain() {
       if (e.outputBuffer.numberOfChannels > 1) {
         e.outputBuffer.getChannelData(1).set(right);
       }
+
+      // Skip silent buffers — the tap fires continuously for the life of the
+      // context, so forwarding silence would send (and store) N× wall-clock
+      // samples for N AudioContexts. Node re-inserts gaps from timestamps.
+      let peak = 0;
+      for (let i = 0; i < left.length; i++) {
+        const a = Math.abs(left[i]);
+        const b = Math.abs(right[i]);
+        if (a > peak) peak = a;
+        if (b > peak) peak = b;
+      }
+      if (peak < SILENCE_THRESHOLD) return;
 
       // Send to Node
       const send = (window as any).__qaHudAudioChunk;
