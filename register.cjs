@@ -21,27 +21,38 @@ if (process.env.QA_HUD === "0") {
   const g = globalThis;
   if (!g.__qaHudGlobal) g.__qaHudGlobal = { audioSegments: new Map() };
 
-  Module._load = function qaHudLoad(request, parent, isMain) {
-    const result = originalLoad.call(this, request, parent, isMain);
+  function patchPlaywrightCore(core) {
+    if (contextProtoPatched || !core) return;
+    contextProtoPatched = true;
 
-    if (!contextProtoPatched && request === "playwright-core") {
-      contextProtoPatched = true;
+    // Patch each browser type's launch method
+    for (const browserType of [core.chromium, core.firefox, core.webkit]) {
+      if (!browserType?.launch) continue;
 
-      // Patch each browser type's launch method
-      for (const browserType of [result.chromium, result.firefox, result.webkit]) {
-        if (!browserType?.launch) continue;
-
-        const origLaunch = browserType.launch.bind(browserType);
-        browserType.launch = async function (...args) {
-          const browser = await origLaunch(...args);
-          patchBrowser(browser);
-          return browser;
-        };
-      }
+      const origLaunch = browserType.launch.bind(browserType);
+      browserType.launch = async function (...args) {
+        const browser = await origLaunch(...args);
+        patchBrowser(browser);
+        return browser;
+      };
     }
+  }
 
-    return result;
-  };
+  if (process.versions.bun) {
+    // Bun's require() doesn't go through Module._load, so patch the
+    // playwright-core singleton directly (loaded from the project root).
+    try {
+      patchPlaywrightCore(require(require.resolve("playwright-core", { paths: [process.cwd()] })));
+    } catch (e) {
+      console.warn("[demowright] Could not load playwright-core under bun:", e.message);
+    }
+  } else {
+    Module._load = function qaHudLoad(request, parent, isMain) {
+      const result = originalLoad.call(this, request, parent, isMain);
+      if (request === "playwright-core") patchPlaywrightCore(result);
+      return result;
+    };
+  }
 
   function patchBrowser(browser) {
     if (browser.__qaHudPatched) return;
