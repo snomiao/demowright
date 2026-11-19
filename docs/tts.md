@@ -61,6 +61,17 @@ await applyHud(context, {
 });
 ```
 
+Function providers work in `withDemowright()` too. Playwright re-evaluates the
+config in every worker, so the function is available wherever tests run:
+
+```ts
+// playwright.config.ts
+import { withDemowright } from 'demowright/config';
+import { myTts } from './my-tts';
+
+export default withDemowright(defineConfig({ ... }), { tts: myTts });
+```
+
 ### Local espeak-ng via child_process
 
 Zero-cost, works offline, no API key:

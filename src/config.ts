@@ -15,6 +15,7 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { PlaywrightTestConfig } from "@playwright/test";
 import { type QaHudOptions, defaultOptions } from "./setup.js";
+import { setGlobalTtsProvider } from "./hud-registry.js";
 
 export type { QaHudOptions };
 
@@ -38,6 +39,9 @@ export function withDemowright(
   if (opts.keyFadeMs !== defaultOptions.keyFadeMs)
     process.env.QA_HUD_KEY_FADE = String(opts.keyFadeMs);
   if (typeof opts.tts === "string") process.env.QA_HUD_TTS = opts.tts;
+  // Functions can't go through env vars; store them process-globally instead.
+  // register.cjs picks this up in each worker (the config is re-evaluated there).
+  else if (typeof opts.tts === "function") setGlobalTtsProvider(opts.tts);
   if (opts.audio) process.env.QA_HUD_AUDIO = typeof opts.audio === "string" ? opts.audio : "1";
   if (opts.autoAnnotate) process.env.QA_HUD_AUTO_ANNOTATE = "1";
   if (opts.outputDir !== defaultOptions.outputDir)
